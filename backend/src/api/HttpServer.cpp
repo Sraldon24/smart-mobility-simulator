@@ -8,15 +8,14 @@ using json = nlohmann::json;
 
 namespace api {
 
-HttpServer::HttpServer(const model::RoadNetwork& network) : network(network) {}
+HttpServer::HttpServer(model::RoadNetwork& network) : network(network) {}
 
 void HttpServer::listen(const char* host, int port) {
     httplib::Server svr;
 
-    // Helper to add CORS headers
     auto set_cors_headers = [](httplib::Response& res) {
         res.set_header("Access-Control-Allow-Origin", "*");
-        res.set_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        res.set_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
         res.set_header("Access-Control-Allow-Headers", "Content-Type");
     };
 
@@ -76,6 +75,11 @@ void HttpServer::listen(const char* host, int port) {
                 algoStr = req.get_param_value("algorithm");
             }
 
+            std::string objStr = "shortest";
+            if (req.has_param("objective")) {
+                objStr = req.get_param_value("objective");
+            }
+
             routing::RoutingAlgorithm algo;
             if (algoStr == "dijkstra") {
                 algo = routing::RoutingAlgorithm::Dijkstra;
@@ -88,11 +92,24 @@ void HttpServer::listen(const char* host, int port) {
                 return;
             }
 
-            auto result = routing::Router::findRoute(network, start, end, algo);
+            routing::RoutingObjective obj;
+            if (objStr == "shortest") {
+                obj = routing::RoutingObjective::Shortest;
+            } else if (objStr == "fastest") {
+                obj = routing::RoutingObjective::Fastest;
+            } else {
+                res.status = 400;
+                json err = {{"error", "invalid routing objective"}};
+                res.set_content(err.dump(), "application/json");
+                return;
+            }
+
+            auto result = routing::Router::findRoute(network, start, end, algo, obj);
             
             json j;
             j["found"] = result.found;
             j["algorithm"] = algoStr;
+            j["objective"] = objStr;
             j["start"] = start;
             j["end"] = end;
             j["nodesExplored"] = result.nodesExplored;
@@ -101,6 +118,7 @@ void HttpServer::listen(const char* host, int port) {
             if (result.found) {
                 j["nodeIds"] = result.nodeIds;
                 j["totalDistanceMeters"] = result.totalCost;
+                j["estimatedTravelTimeSeconds"] = result.estimatedTravelTimeSeconds;
             } else {
                 j["error"] = "Route not found or invalid node ID";
                 res.status = 404;
@@ -109,8 +127,181 @@ void HttpServer::listen(const char* host, int port) {
             res.set_content(j.dump(), "application/json");
         } catch (const std::exception& e) {
             res.status = 400;
-            json err = {{"error", "Invalid parameter format. Start and end must be integers."}};
+            json err = {{"error", "Invalid parameter format"}};
             res.set_content(err.dump(), "application/json");
+        }
+    });
+
+    svr.Get("/incidents", [&](const httplib::Request&, httplib::Response& res) {
+        set_cors_headers(res);
+        json j;
+        j["incidents"] = json::array();
+        for (const auto& inc : network.getIncidents()) {
+            std::string typeStr = (inc.type == model::IncidentType::Closure) ? "closure" : "accident";
+            j["incidents"].push_back({
+                {"from", inc.from},
+                {"to", inc.to},
+                {"type", typeStr}
+            });
+        }
+        res.set_content(j.dump(), "application/json");
+    });
+
+    auto processReroute = [&](const json& body, int incidentFrom, int incidentTo, json& response, bool isClear) {
+        response["routeAffected"] = false;
+        response["rerouted"] = false;
+
+        if (body.contains("activeRoute") && body["activeRoute"].is_object()) {
+            auto activeRoute = body["activeRoute"];
+            
+            bool affected = false;
+            
+            // If it's an incident ADD, it only affects the route if the incident edge is ON the route
+            if (!isClear) {
+                if (activeRoute.contains("nodeIds") && activeRoute["nodeIds"].is_array()) {
+                    auto nodes = activeRoute["nodeIds"].get<std::vector<int>>();
+                    for (size_t i = 0; i < nodes.size() - 1; ++i) {
+                        if ((nodes[i] == incidentFrom && nodes[i+1] == incidentTo) ||
+                            (nodes[i] == incidentTo && nodes[i+1] == incidentFrom)) {
+                            affected = true;
+                            break;
+                        }
+                    }
+                }
+            } else {
+                // If it's a CLEAR, we just consider it affected to trigger a recalculation check
+                affected = true; 
+            }
+
+            if (affected && activeRoute.contains("start") && activeRoute.contains("end") && 
+                activeRoute.contains("algorithm") && activeRoute.contains("objective")) {
+                
+                int start = activeRoute["start"];
+                int end = activeRoute["end"];
+                std::string algoStr = activeRoute["algorithm"];
+                std::string objStr = activeRoute["objective"];
+                
+                routing::RoutingAlgorithm algo = (algoStr == "astar") ? routing::RoutingAlgorithm::AStar : routing::RoutingAlgorithm::Dijkstra;
+                routing::RoutingObjective obj = (objStr == "fastest") ? routing::RoutingObjective::Fastest : routing::RoutingObjective::Shortest;
+
+                auto newResult = routing::Router::findRoute(network, start, end, algo, obj);
+
+                bool rerouted = false;
+                auto oldNodes = activeRoute["nodeIds"].get<std::vector<int>>();
+                
+                if (newResult.found) {
+                    if (newResult.nodeIds != oldNodes) {
+                        rerouted = true;
+                        response["previousRoute"] = oldNodes;
+                        response["newRoute"] = newResult.nodeIds;
+                        response["previousDistanceMeters"] = activeRoute["totalDistanceMeters"];
+                        response["newDistanceMeters"] = newResult.totalCost;
+                        response["previousTravelTimeSeconds"] = activeRoute["estimatedTravelTimeSeconds"];
+                        response["newTravelTimeSeconds"] = newResult.estimatedTravelTimeSeconds;
+                    }
+                } else {
+                    rerouted = true; // No route available is a significant route change
+                }
+
+                // For CLEAR, only say routeAffected=true if it ACTUALLY changed the route.
+                // For ADD, say it if it was on the route.
+                if (isClear && !rerouted) {
+                    response["routeAffected"] = false;
+                } else {
+                    response["routeAffected"] = true;
+                    response["rerouted"] = rerouted;
+
+                    response["newRouteResult"] = {
+                        {"found", newResult.found},
+                        {"algorithm", algoStr},
+                        {"objective", objStr},
+                        {"start", start},
+                        {"end", end},
+                        {"nodeIds", newResult.nodeIds},
+                        {"totalDistanceMeters", newResult.totalCost},
+                        {"estimatedTravelTimeSeconds", newResult.estimatedTravelTimeSeconds},
+                        {"nodesExplored", newResult.nodesExplored},
+                        {"runtimeMicroseconds", newResult.runtimeMicroseconds}
+                    };
+                }
+            }
+        }
+    };
+
+    svr.Post("/incident", [&](const httplib::Request& req, httplib::Response& res) {
+        set_cors_headers(res);
+        try {
+            auto body = json::parse(req.body);
+            if (!body.contains("from") || !body.contains("to") || !body.contains("type")) {
+                res.status = 400;
+                res.set_content(json{{"error", "Missing fields"}}.dump(), "application/json");
+                return;
+            }
+            
+            int from = body["from"];
+            int to = body["to"];
+            std::string typeStr = body["type"];
+            
+            model::IncidentType type;
+            if (typeStr == "closure") type = model::IncidentType::Closure;
+            else if (typeStr == "accident") type = model::IncidentType::Accident;
+            else {
+                res.status = 400;
+                res.set_content(json{{"error", "Invalid incident type"}}.dump(), "application/json");
+                return;
+            }
+
+            if (!network.getNodeById(from) || !network.getNodeById(to)) {
+                res.status = 400;
+                res.set_content(json{{"error", "Invalid node ID"}}.dump(), "application/json");
+                return;
+            }
+
+            if (network.addIncident(from, to, type)) {
+                json response = {
+                    {"status", "success"},
+                    {"incidentAdded", true}
+                };
+                processReroute(body, from, to, response, false);
+                res.status = 200;
+                res.set_content(response.dump(), "application/json");
+            } else {
+                res.status = 400;
+                res.set_content(json{{"error", "Incident already exists or road not found"}}.dump(), "application/json");
+            }
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json{{"error", "Malformed request"}}.dump(), "application/json");
+        }
+    });
+
+    svr.Delete("/incident", [&](const httplib::Request& req, httplib::Response& res) {
+        set_cors_headers(res);
+        try {
+            auto body = json::parse(req.body);
+            if (!body.contains("from") || !body.contains("to")) {
+                res.status = 400;
+                res.set_content(json{{"error", "Missing fields"}}.dump(), "application/json");
+                return;
+            }
+            
+            int from = body["from"];
+            int to = body["to"];
+            
+            if (network.removeIncident(from, to)) {
+                json response = {
+                    {"status", "success"}
+                };
+                processReroute(body, from, to, response, true);
+                res.status = 200;
+                res.set_content(response.dump(), "application/json");
+            } else {
+                res.status = 404;
+                res.set_content(json{{"error", "Incident not found"}}.dump(), "application/json");
+            }
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json{{"error", "Malformed request"}}.dump(), "application/json");
         }
     });
 

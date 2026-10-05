@@ -6,11 +6,11 @@ namespace api {
 
 class HttpServer {
 public:
-    HttpServer(const model::RoadNetwork& network);
+    HttpServer(model::RoadNetwork& network);
     void listen(const char* host, int port);
 
 private:
-    const model::RoadNetwork& network;
+    model::RoadNetwork& network;
 };
 
 } // namespace api
