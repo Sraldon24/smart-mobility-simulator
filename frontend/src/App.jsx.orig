@@ -24,14 +24,11 @@ function App() {
 
   const [vehicles, setVehicles] = useState([])
   const [simulationTime, setSimulationTime] = useState(0)
-  const [congestedRoadCount, setCongestedRoadCount] = useState(0)
-  const [averageCongestion, setAverageCongestion] = useState(1.0)
-  const [totalReroutes, setTotalReroutes] = useState(0)
   const [simOrigin, setSimOrigin] = useState('')
   const [simDest, setSimDest] = useState('')
   const [simError, setSimError] = useState(null)
 
-  const API_URL = 'http://localhost:8400'
+  const API_URL = 'http://localhost:8080'
 
   const fetchCityAndIncidents = () => {
     fetch(`${API_URL}/city`)
@@ -50,12 +47,7 @@ function App() {
   const fetchSimulationState = () => {
     fetch(`${API_URL}/simulation`)
       .then(res => res.json())
-      .then(data => {
-        setSimulationTime(data.simulationTimeSeconds || 0)
-        setCongestedRoadCount(data.congestedRoadCount || 0)
-        setAverageCongestion(data.averageCongestionFactor || 1.0)
-        setTotalReroutes(data.totalReroutes || 0)
-      })
+      .then(data => setSimulationTime(data.simulationTimeSeconds || 0))
       .catch(err => console.error("Failed to load simulation time:", err))
 
     fetch(`${API_URL}/vehicles`)
@@ -133,7 +125,6 @@ function App() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       fetchSimulationState();
-      fetchCityData();
     })
     .catch(err => setSimError(err.message));
   }

@@ -1,0 +1,20 @@
+--- backend/include/simulation/SimulationEngine.hpp
++++ backend/include/simulation/SimulationEngine.hpp
+@@ -29,10 +29,14 @@
+     int getWaitingVehicleCount() const;
+     int getMovingVehicleCount() const;
+     int getArrivedVehicleCount() const;
++    
++    int getCongestedRoadCount() const;
++    double getAverageCongestionFactor() const;
++    int getTotalReroutes() const;
+ 
+ private:
+     model::RoadNetwork& network;
+     std::vector<model::Vehicle> vehicles;
+     double simulationTimeSeconds{0.0};
+     int nextVehicleId{1};
++    int totalReroutes{0};
+ };
+ 
+ } // namespace simulation

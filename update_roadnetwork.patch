@@ -1,0 +1,58 @@
+--- backend/include/model/RoadNetwork.hpp
++++ backend/include/model/RoadNetwork.hpp
+@@ -29,6 +29,7 @@
+ 
+     const std::vector<Node>& getNodes() const;
+     const std::vector<Road>& getRoads() const;
++    std::vector<Road>& getRoadsMutable();
+ 
+     const Node* getNodeById(int id) const;
+     Road* getRoadMutable(int from, int to);
+--- backend/src/model/RoadNetwork.cpp
++++ backend/src/model/RoadNetwork.cpp
+@@ -19,6 +19,10 @@
+     return roads;
+ }
+ 
++std::vector<Road>& RoadNetwork::getRoadsMutable() {
++    return roads;
++}
++
+ const Node* RoadNetwork::getNodeById(int id) const {
+     auto it = std::find_if(nodes.begin(), nodes.end(), [id](const Node& n) {
+         return n.id == id;
+@@ -66,16 +70,14 @@
+     inc.type = type;
+ 
+     if (fwd) {
+-        inc.originalTrafficFactorFromTo = fwd->trafficFactor;
+         inc.originalClosedFromTo = fwd->closed;
+         if (type == IncidentType::Closure) fwd->closed = true;
+-        else if (type == IncidentType::Accident) fwd->trafficFactor = 3.0; // severe accident penalty
++        else if (type == IncidentType::Accident) fwd->incidentFactor = 3.0; // severe accident penalty
+     }
+ 
+     if (bwd) {
+-        inc.originalTrafficFactorToFrom = bwd->trafficFactor;
+         inc.originalClosedToFrom = bwd->closed;
+         if (type == IncidentType::Closure) bwd->closed = true;
+-        else if (type == IncidentType::Accident) bwd->trafficFactor = 3.0;
++        else if (type == IncidentType::Accident) bwd->incidentFactor = 3.0;
+     }
+ 
+     incidents.push_back(inc);
+@@ -95,12 +97,12 @@
+         Road* bwd = getRoadMutable(maxId, minId);
+ 
+         if (fwd) {
+-            fwd->trafficFactor = it->originalTrafficFactorFromTo;
++            fwd->incidentFactor = 1.0;
+             fwd->closed = it->originalClosedFromTo;
+         }
+ 
+         if (bwd) {
+-            bwd->trafficFactor = it->originalTrafficFactorToFrom;
++            bwd->incidentFactor = 1.0;
+             bwd->closed = it->originalClosedToFrom;
+         }
+ 

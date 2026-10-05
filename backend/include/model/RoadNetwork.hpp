@@ -29,6 +29,7 @@ public:
 
     const std::vector<Node>& getNodes() const;
     const std::vector<Road>& getRoads() const;
+    std::vector<Road>& getRoadsMutable();
 
     const Node* getNodeById(int id) const;
     Road* getRoadMutable(int from, int to);

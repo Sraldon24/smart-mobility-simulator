@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function CityMap({ nodes, roads, startNode, destNode, routeNodeIds, onNodeClick }) {
+export default function CityMap({ nodes, roads, startNode, destNode, routeNodeIds, vehicles, onNodeClick }) {
   // Deduplicate roads visually
   const visualRoads = [];
   const seenRoads = new Set();
@@ -133,6 +133,15 @@ export default function CityMap({ nodes, roads, startNode, destNode, routeNodeId
             </g>
           );
         })}
+      {/* Layer 4: Vehicles */}
+        {vehicles && vehicles.map(v => (
+          <g key={`vehicle-${v.id}`} transform={`translate(${v.x},${v.y})`}>
+            <circle r="5" fill="#e74c3c" stroke="#c0392b" strokeWidth="1" />
+            <text textAnchor="middle" dy=".3em" fill="#fff" fontSize="7" fontWeight="bold" pointerEvents="none">
+              {v.id}
+            </text>
+          </g>
+        ))}
       </svg>
       
       {/* Legend */}

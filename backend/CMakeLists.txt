@@ -18,6 +18,7 @@ add_executable(smart_mobility_backend
     src/model/GeneratedCityLoader.cpp
     src/routing/Router.cpp
     src/api/HttpServer.cpp
+    src/simulation/SimulationEngine.cpp
 )
 target_include_directories(smart_mobility_backend PRIVATE include)
 target_link_libraries(smart_mobility_backend PRIVATE nlohmann_json::nlohmann_json httplib::httplib)

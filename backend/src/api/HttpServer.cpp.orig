@@ -50,8 +50,6 @@ void HttpServer::listen(const char* host, int port) {
                 {"distanceMeters", road.distanceMeters},
                 {"speedLimitKph", road.speedLimitKph},
                 {"trafficFactor", road.getEffectiveTrafficFactor()},
-                {"dynamicCongestionFactor", road.dynamicCongestionFactor},
-                {"currentVehicleCount", road.currentVehicleCount},
                 {"closed", road.closed}
             });
         }
@@ -425,10 +423,7 @@ void HttpServer::listen(const char* host, int port) {
             {"vehicleCount", engine.getVehicles().size()},
             {"waiting", engine.getWaitingVehicleCount()},
             {"moving", engine.getMovingVehicleCount()},
-            {"arrived", engine.getArrivedVehicleCount()},
-            {"congestedRoadCount", engine.getCongestedRoadCount()},
-            {"averageCongestionFactor", engine.getAverageCongestionFactor()},
-            {"totalReroutes", engine.getTotalReroutes()}
+            {"arrived", engine.getArrivedVehicleCount()}
         };
         res.set_content(j.dump(), "application/json");
     });

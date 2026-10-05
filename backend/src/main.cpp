@@ -3,6 +3,8 @@
 #include "model/GeneratedCityLoader.hpp"
 #include "routing/Router.hpp"
 #include "api/HttpServer.hpp"
+#include "simulation/SimulationEngine.hpp"
+#include <chrono>
 
 void printRouteResult(const routing::RouteResult& result, int start, int dest, const std::string& algo, const std::string& obj) {
     if (!result.found) {
@@ -28,6 +30,7 @@ int main() {
     std::cout << "========================================================\n\n";
 
     model::RoadNetwork network = model::GeneratedCityLoader::generate5x5Grid();
+    simulation::SimulationEngine engine(network);
 
     std::cout << "--- 1. Baseline Route 0 -> 24 (Fastest) ---\n";
     auto baseFastest = routing::Router::findRouteDijkstra(network, 0, 24, routing::RoutingObjective::Fastest);
@@ -58,9 +61,34 @@ int main() {
     auto afterUnusedIncidentFastest = routing::Router::findRouteDijkstra(network, 0, 24, routing::RoutingObjective::Fastest);
     printRouteResult(afterUnusedIncidentFastest, 0, 24, "Dijkstra", "Fastest");
 
-    std::cout << "\nStarting API server...\n";
-    api::HttpServer server(network);
-    server.listen("0.0.0.0", 8080);
+    std::cout << "\n--- MVP 4 Step 3: Simulation Engine Batch & Timing Test ---\n";
+    engine.reset();
+    
+    auto runBatchTest = [&](int count) {
+        engine.reset();
+        int spawned = engine.spawnVehiclesBatch(count);
+        std::cout << "Spawned " << spawned << " / " << count << " vehicles.\n";
+        
+        auto start = std::chrono::high_resolution_clock::now();
+        engine.update(1.0);
+        auto end = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        
+        std::cout << "Update timing for " << count << " vehicles: " << duration << " us\n";
+        std::cout << "State -> Waiting: " << engine.getWaitingVehicleCount() 
+                  << ", Moving: " << engine.getMovingVehicleCount() 
+                  << ", Arrived: " << engine.getArrivedVehicleCount() << "\n\n";
+    };
+    
+    runBatchTest(10);
+    runBatchTest(50);
+    runBatchTest(100);
+
+    // Leave 100 vehicles running for API
+    std::cout << "Leaving 100 vehicles spawned for API.\n";
+    std::cout << "Starting API server...\n";
+    api::HttpServer server(network, engine);
+    server.listen("127.0.0.1", 8400);
 
     return 0;
 }

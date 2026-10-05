@@ -1,0 +1,23 @@
+--- backend/src/api/HttpServer.cpp
++++ backend/src/api/HttpServer.cpp
+@@ -50,6 +50,8 @@
+                 {"distanceMeters", road.distanceMeters},
+                 {"speedLimitKph", road.speedLimitKph},
+                 {"trafficFactor", road.getEffectiveTrafficFactor()},
++                {"dynamicCongestionFactor", road.dynamicCongestionFactor},
++                {"currentVehicleCount", road.currentVehicleCount},
+                 {"closed", road.closed}
+             });
+         }
+@@ -216,7 +218,10 @@
+             {"vehicleCount", engine.getVehicles().size()},
+             {"waiting", engine.getWaitingVehicleCount()},
+             {"moving", engine.getMovingVehicleCount()},
+-            {"arrived", engine.getArrivedVehicleCount()}
++            {"arrived", engine.getArrivedVehicleCount()},
++            {"congestedRoadCount", engine.getCongestedRoadCount()},
++            {"averageCongestionFactor", engine.getAverageCongestionFactor()},
++            {"totalReroutes", engine.getTotalReroutes()}
+         };
+         res.set_content(j.dump(), "application/json");
+     });

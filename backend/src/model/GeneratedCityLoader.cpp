@@ -36,15 +36,15 @@ RoadNetwork GeneratedCityLoader::generate5x5Grid() {
             if (col < gridSize - 1) {
                 int rightId = id + 1;
                 double tf = getTrafficFactor(row, col, 0);
-                network.addRoad(Road{id, rightId, distance, speedLimit, tf, false});
-                network.addRoad(Road{rightId, id, distance, speedLimit, tf, false}); // Symmetric traffic for simplicity
+                network.addRoad(Road{id, rightId, distance, speedLimit, tf, 1.0, 1.0, false, 0});
+                network.addRoad(Road{rightId, id, distance, speedLimit, tf, 1.0, 1.0, false, 0}); // Symmetric traffic for simplicity
             }
 
             if (row < gridSize - 1) {
                 int bottomId = id + gridSize;
                 double tf = getTrafficFactor(row, col, 1);
-                network.addRoad(Road{id, bottomId, distance, speedLimit, tf, false});
-                network.addRoad(Road{bottomId, id, distance, speedLimit, tf, false});
+                network.addRoad(Road{id, bottomId, distance, speedLimit, tf, 1.0, 1.0, false, 0});
+                network.addRoad(Road{bottomId, id, distance, speedLimit, tf, 1.0, 1.0, false, 0});
             }
         }
     }

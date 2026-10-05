@@ -19,10 +19,6 @@ const std::vector<Road>& RoadNetwork::getRoads() const {
     return roads;
 }
 
-std::vector<Road>& RoadNetwork::getRoadsMutable() {
-    return roads;
-}
-
 const Node* RoadNetwork::getNodeById(int id) const {
     auto it = std::find_if(nodes.begin(), nodes.end(), [id](const Node& n) {
         return n.id == id;
@@ -70,15 +66,17 @@ bool RoadNetwork::addIncident(int from, int to, IncidentType type) {
     inc.type = type;
 
     if (fwd) {
+        inc.originalTrafficFactorFromTo = fwd->trafficFactor;
         inc.originalClosedFromTo = fwd->closed;
         if (type == IncidentType::Closure) fwd->closed = true;
-        else if (type == IncidentType::Accident) fwd->incidentFactor = 3.0; // severe accident penalty
+        else if (type == IncidentType::Accident) fwd->trafficFactor = 3.0; // severe accident penalty
     }
 
     if (bwd) {
+        inc.originalTrafficFactorToFrom = bwd->trafficFactor;
         inc.originalClosedToFrom = bwd->closed;
         if (type == IncidentType::Closure) bwd->closed = true;
-        else if (type == IncidentType::Accident) bwd->incidentFactor = 3.0;
+        else if (type == IncidentType::Accident) bwd->trafficFactor = 3.0;
     }
 
     incidents.push_back(inc);
@@ -98,12 +96,12 @@ bool RoadNetwork::removeIncident(int from, int to) {
         Road* bwd = getRoadMutable(maxId, minId);
 
         if (fwd) {
-            fwd->incidentFactor = 1.0;
+            fwd->trafficFactor = it->originalTrafficFactorFromTo;
             fwd->closed = it->originalClosedFromTo;
         }
 
         if (bwd) {
-            bwd->incidentFactor = 1.0;
+            bwd->trafficFactor = it->originalTrafficFactorToFrom;
             bwd->closed = it->originalClosedToFrom;
         }
 
