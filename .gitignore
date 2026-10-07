@@ -68,3 +68,5 @@ data/montreal/*.osm.pbf
 # Personal learning and interview notes
 docs/cpp-learning-notes.md
 docs/interview-walkthrough.md
+data/montreal/*.bin
+data/montreal/*.bin

@@ -18,10 +18,10 @@ export default function MontrealMap({ nodes, roads, startNode, destNode, routeNo
           'osm-tiles': {
             type: 'raster',
             tiles: [
-              'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+              'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
             ],
             tileSize: 256,
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
           }
         },
         layers: [
@@ -75,7 +75,7 @@ export default function MontrealMap({ nodes, roads, startNode, destNode, routeNo
           'line-cap': 'round'
         },
         paint: {
-          'line-color': '#3498db',
+          'line-color': '#58a6ff',
           'line-width': 6
         }
       });
@@ -88,7 +88,7 @@ export default function MontrealMap({ nodes, roads, startNode, destNode, routeNo
           'circle-radius': ['get', 'radius'],
           'circle-color': ['get', 'color'],
           'circle-stroke-width': 2,
-          'circle-stroke-color': '#ffffff'
+          'circle-stroke-color': '#0d1117'
         }
       });
 
@@ -98,9 +98,9 @@ export default function MontrealMap({ nodes, roads, startNode, destNode, routeNo
         source: 'vehicles',
         paint: {
           'circle-radius': 5,
-          'circle-color': '#e74c3c',
+          'circle-color': '#58a6ff',
           'circle-stroke-width': 1,
-          'circle-stroke-color': '#c0392b'
+          'circle-stroke-color': '#3182ce'
         }
       });
 
@@ -142,11 +142,11 @@ export default function MontrealMap({ nodes, roads, startNode, destNode, routeNo
     const seen = new Set();
     
     const getTrafficColor = (r) => {
-      if (r.closed) return '#8e44ad'; // Closed (purple)
-      if (r.trafficFactor >= 5.0) return '#c0392b'; // Accident/Very congested
-      if (r.trafficFactor >= 2.0) return '#e67e22'; // Congested
-      if (r.trafficFactor > 1.0) return '#f1c40f'; // Moderate
-      return '#bdc3c7'; // Free
+      if (r.closed) return '#da3633'; // Closed
+      if (r.trafficFactor >= 5.0) return '#da3633'; // Accident/Very congested
+      if (r.trafficFactor >= 2.0) return '#d29922'; // Congested
+      if (r.trafficFactor > 1.0) return '#a371f7'; // Moderate
+      return '#30363d'; // Free
     };
 
     roads.forEach(r => {
@@ -250,8 +250,8 @@ export default function MontrealMap({ nodes, roads, startNode, destNode, routeNo
       }
     };
     
-    if (startNode !== null) addNode(startNode, '#2ecc71', 8);
-    if (destNode !== null) addNode(destNode, '#e74c3c', 8);
+    if (startNode !== null) addNode(startNode, '#238636', 8);
+    if (destNode !== null) addNode(destNode, '#da3633', 8);
     
     map.current.getSource('endpoints').setData({ type: 'FeatureCollection', features });
   }, [startNode, destNode]);
@@ -268,7 +268,7 @@ export default function MontrealMap({ nodes, roads, startNode, destNode, routeNo
   }, [vehicles]);
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '500px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #dee2e6' }}>
+    <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
       <div ref={mapContainer} style={{ width: '100%', height: '100%' }} />
     </div>
   );

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { Activity, Car, Route, Clock } from 'lucide-react';
 
-const AnalyticsDashboard = () => {
+export default function AnalyticsDashboard() {
   const [metrics, setMetrics] = useState(null);
   const [history, setHistory] = useState([]);
   
@@ -16,7 +17,7 @@ const AnalyticsDashboard = () => {
           }
         }
       } catch (err) {
-        console.error("Failed to fetch analytics metrics", err);
+        // Silently ignore if backend is not up yet
       }
     };
     
@@ -30,92 +31,74 @@ const AnalyticsDashboard = () => {
   const { routing, simulation, traffic } = metrics;
 
   return (
-    <div style={{ marginTop: '30px', padding: '20px', backgroundColor: '#f4f6f7', borderRadius: '8px', border: '1px solid #d5dbdb' }}>
-      <h2 style={{ marginTop: 0, textAlign: 'center', color: '#2c3e50' }}>Analytics Dashboard</h2>
-      <p style={{ textAlign: 'center', color: '#7f8c8d', fontSize: '0.9rem', marginBottom: '20px' }}>
-        City Mode: <strong style={{ textTransform: 'capitalize' }}>{metrics.cityMode}</strong>
-      </p>
+    <div className="panel flex-col gap-md">
+      <div className="flex-row" style={{ justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+        <h2 style={{ margin: 0, borderBottom: 'none', padding: 0 }} className="flex-row gap-sm"><Activity size={18}/> Global Analytics</h2>
+        <span className="text-secondary text-sm">City Mode: <strong style={{ textTransform: 'capitalize', color: 'var(--text-primary)' }}>{metrics.cityMode}</strong></span>
+      </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
         
-        {/* Simulation Cards */}
-        <div style={{ backgroundColor: 'white', padding: '15px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-          <h3 style={{ marginTop: 0, color: '#34495e', borderBottom: '2px solid #ecf0f1', paddingBottom: '10px' }}>Simulation</h3>
-          <p><strong>Total Vehicles:</strong> {simulation.vehicleCount}</p>
-          <p><strong>Moving:</strong> {simulation.moving}</p>
-          <p><strong>Arrived:</strong> {simulation.arrived}</p>
-          <p><strong>Simulation Time:</strong> {simulation.simulationTimeSeconds.toFixed(1)} s</p>
-          <p><strong>Avg Trip Time:</strong> {simulation.averageTripTimeSeconds.toFixed(1)} s</p>
-          <p><strong>Update Time:</strong> {simulation.averageSimulationUpdateMicroseconds.toFixed(0)} &micro;s</p>
+        {/* Simulation */}
+        <div className="card flex-col gap-sm">
+          <h3 className="flex-row gap-sm"><Car size={16}/> Simulation</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.85rem' }}>
+            <div className="flex-col"><span className="text-muted">Total Vehicles</span><span className="font-bold text-mono">{simulation.vehicleCount}</span></div>
+            <div className="flex-col"><span className="text-muted">Moving</span><span className="font-bold text-mono text-accent" style={{color: 'var(--accent)'}}>{simulation.moving}</span></div>
+            <div className="flex-col"><span className="text-muted">Arrived</span><span className="font-bold text-mono text-success" style={{color: 'var(--success)'}}>{simulation.arrived}</span></div>
+            <div className="flex-col"><span className="text-muted">Avg Trip Time</span><span className="font-bold text-mono">{simulation.averageTripTimeSeconds.toFixed(1)}s</span></div>
+            <div className="flex-col"><span className="text-muted">Update Loop</span><span className="font-bold text-mono">{simulation.averageSimulationUpdateMicroseconds.toFixed(0)}µs</span></div>
+            <div className="flex-col"><span className="text-muted">Sim Time</span><span className="font-bold text-mono">{simulation.simulationTimeSeconds.toFixed(1)}s</span></div>
+          </div>
         </div>
 
-        {/* Traffic Cards */}
-        <div style={{ backgroundColor: 'white', padding: '15px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-          <h3 style={{ marginTop: 0, color: '#e67e22', borderBottom: '2px solid #ecf0f1', paddingBottom: '10px' }}>Traffic</h3>
-          <p><strong>Congested Roads:</strong> {traffic.congestedRoadCount}</p>
-          <p><strong>Avg Congestion:</strong> {traffic.averageCongestionFactor.toFixed(2)}x</p>
-          <p><strong>Total Reroutes:</strong> {traffic.totalReroutes}</p>
+        {/* Traffic */}
+        <div className="card flex-col gap-sm">
+          <h3 className="flex-row gap-sm"><Activity size={16} color="var(--warning)"/> Traffic</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.85rem' }}>
+            <div className="flex-col"><span className="text-muted">Congested Roads</span><span className="font-bold text-mono">{traffic.congestedRoadCount}</span></div>
+            <div className="flex-col"><span className="text-muted">Avg Congestion</span><span className="font-bold text-mono">{traffic.averageCongestionFactor.toFixed(2)}x</span></div>
+            <div className="flex-col"><span className="text-muted">Total Reroutes</span><span className="font-bold text-mono">{traffic.totalReroutes}</span></div>
+          </div>
           
           {history.length > 0 && (
-            <div style={{ marginTop: '15px' }}>
-              <strong style={{ fontSize: '0.85rem' }}>Active vs Arrived Vehicles (Last 30)</strong>
-              <div style={{ display: 'flex', alignItems: 'flex-end', height: '50px', gap: '2px', marginTop: '5px' }}>
+            <div className="flex-col" style={{ marginTop: '0.5rem', height: '40px', justifyContent: 'flex-end' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', height: '100%', gap: '1px' }}>
                 {history.slice(-30).map((h, i) => {
                   const max = Math.max(1, ...history.map(x => x.simulation.vehicleCount));
                   const movingHeight = (h.simulation.moving / max) * 100;
                   const arrivedHeight = (h.simulation.arrived / max) * 100;
                   return (
                     <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%' }}>
-                      <div style={{ backgroundColor: '#2ecc71', height: `${arrivedHeight}%` }} title="Arrived" />
-                      <div style={{ backgroundColor: '#3498db', height: `${movingHeight}%` }} title="Moving" />
+                      <div style={{ backgroundColor: 'var(--success)', height: `${arrivedHeight}%` }} />
+                      <div style={{ backgroundColor: 'var(--accent)', height: `${movingHeight}%` }} />
                     </div>
                   );
                 })}
               </div>
+              <span className="text-muted" style={{ fontSize: '0.6rem', textAlign: 'center', marginTop: '2px' }}>Vehicles: Moving (Blue) / Arrived (Green)</span>
             </div>
           )}
         </div>
 
-        {/* Algorithm Comparison / Routing */}
-        <div style={{ backgroundColor: 'white', padding: '15px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-          <h3 style={{ marginTop: 0, color: '#9b59b6', borderBottom: '2px solid #ecf0f1', paddingBottom: '10px' }}>Algorithm Comparison</h3>
-          {routing.dijkstraNodes > 0 || routing.astarNodes > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '0.9rem' }}>
-              <div>
-                <h4 style={{ margin: '0 0 5px 0' }}>Dijkstra</h4>
-                <div>Nodes: {routing.dijkstraNodes}</div>
-                <div>Runtime: {routing.dijkstraRuntime} &micro;s</div>
-                <div>Dist: {routing.dijkstraDistance.toFixed(0)}m</div>
-              </div>
-              <div>
-                <h4 style={{ margin: '0 0 5px 0' }}>A*</h4>
-                <div>Nodes: {routing.astarNodes}</div>
-                <div>Runtime: {routing.astarRuntime} &micro;s</div>
-                <div>Dist: {routing.astarDistance.toFixed(0)}m</div>
-              </div>
+        {/* Routing */}
+        <div className="card flex-col gap-sm">
+          <h3 className="flex-row gap-sm"><Route size={16}/> Routing</h3>
+          {routing.dijkstraRequests > 0 || routing.astarRequests > 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.85rem' }}>
+              <div className="flex-col"><span className="text-muted">Dijkstra Req</span><span className="font-bold text-mono">{routing.dijkstraRequests}</span></div>
+              <div className="flex-col"><span className="text-muted">A* Req</span><span className="font-bold text-mono">{routing.astarRequests}</span></div>
+              <div className="flex-col"><span className="text-muted">Dijkstra Runtime</span><span className="font-bold text-mono">{routing.averageDijkstraRuntimeMicroseconds.toFixed(0)}µs</span></div>
+              <div className="flex-col"><span className="text-muted">A* Runtime</span><span className="font-bold text-mono">{routing.averageAstarRuntimeMicroseconds.toFixed(0)}µs</span></div>
+              <div className="flex-col"><span className="text-muted">Dijkstra Explored</span><span className="font-bold text-mono">{routing.averageDijkstraNodesExplored.toFixed(0)}</span></div>
+              <div className="flex-col"><span className="text-muted">A* Explored</span><span className="font-bold text-mono">{routing.averageAstarNodesExplored.toFixed(0)}</span></div>
             </div>
           ) : (
-            <p style={{ fontStyle: 'italic', color: '#7f8c8d' }}>Run an algorithm comparison to see data here.</p>
+            <span className="text-muted text-sm" style={{ fontStyle: 'italic' }}>No routes calculated yet.</span>
           )}
-          
-          <div style={{ marginTop: '15px', borderTop: '1px solid #ecf0f1', paddingTop: '10px' }}>
-            <h4 style={{ margin: '0 0 5px 0' }}>Last Routing (Explicit)</h4>
-            {routing.lastAlgorithm !== "none" ? (
-              <div style={{ fontSize: '0.9rem' }}>
-                <div>Algo: <span style={{ textTransform: 'capitalize' }}>{routing.lastAlgorithm}</span></div>
-                <div>Dist: {routing.lastRouteDistanceMeters.toFixed(1)}m | Time: {routing.lastRouteTimeSeconds.toFixed(1)}s</div>
-                <div>Nodes Explored: {routing.nodesExplored}</div>
-              </div>
-            ) : (
-              <span style={{ fontSize: '0.9rem', fontStyle: 'italic', color: '#bdc3c7' }}>No explicit route run yet.</span>
-            )}
-          </div>
         </div>
 
       </div>
     </div>
   );
-};
-
-export default AnalyticsDashboard;
-
+}

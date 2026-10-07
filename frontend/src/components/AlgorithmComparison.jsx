@@ -1,46 +1,63 @@
 import React from 'react';
+import { Activity, Clock, Zap, Map } from 'lucide-react';
 
 export default function AlgorithmComparison({ comparisonResults, comparisonError }) {
   if (!comparisonResults && !comparisonError) return null;
 
-  const renderComparisonCard = (title, res, isFirst) => {
+  const renderComparisonCard = (title, res, isWinner) => {
     if (!res) return null;
     return (
-      <div style={{ flex: 1, minWidth: '250px', backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '8px', border: '1px solid #dee2e6' }}>
-        <h3 style={{ marginTop: 0, color: '#2c3e50', borderBottom: '2px solid #bdc3c7', paddingBottom: '10px' }}>{title}</h3>
+      <div className={`panel comparison-card ${isWinner ? 'winner' : ''}`}>
+        <div className="panel-header">
+          <h3>{title}</h3>
+          {isWinner && <span className="winner-badge"><Zap size={14} /> Fastest</span>}
+        </div>
+        
         {!res.found ? (
-          <p style={{ color: '#c0392b', fontWeight: 'bold' }}>No route found.</p>
+          <div className="error-message">No route found.</div>
         ) : (
-          <div>
-            <p><strong>Distance:</strong> {res.totalDistanceMeters} m</p>
-            <p><strong>Travel Time:</strong> {res.estimatedTravelTimeSeconds.toFixed(1)} s</p>
-            <p><strong>Nodes explored:</strong> {res.nodesExplored}</p>
-            <p><strong>Runtime:</strong> {res.runtimeMicroseconds} &micro;s</p>
-            <p><strong>Route segments:</strong> {res.nodeIds.length > 0 ? res.nodeIds.length - 1 : 0}</p>
+          <div className="metrics-grid">
+            <div className="metric-item">
+              <span className="metric-label"><Map size={14} /> Distance</span>
+              <span className="metric-value">{res.totalDistanceMeters} m</span>
+            </div>
+            <div className="metric-item">
+              <span className="metric-label"><Clock size={14} /> Travel Time</span>
+              <span className="metric-value">{res.estimatedTravelTimeSeconds.toFixed(1)} s</span>
+            </div>
+            <div className="metric-item">
+              <span className="metric-label"><Activity size={14} /> Nodes Explored</span>
+              <span className="metric-value highlight">{res.nodesExplored}</span>
+            </div>
+            <div className="metric-item">
+              <span className="metric-label"><Zap size={14} /> Runtime</span>
+              <span className="metric-value highlight">{res.runtimeMicroseconds} &micro;s</span>
+            </div>
           </div>
         )}
       </div>
     );
   };
 
-  return (
-    <div style={{ marginTop: '30px', borderTop: '2px solid #ecf0f1', paddingTop: '20px' }}>
-      <h2 style={{ textAlign: 'center', marginBottom: '20px' }}>Algorithm Comparison</h2>
-      
-      <p style={{ textAlign: 'center', color: '#7f8c8d', fontStyle: 'italic', marginBottom: '20px' }}>
-        Note: Runtime may vary between runs, especially on small graphs.
-      </p>
+  const dTime = comparisonResults?.dijkstra?.runtimeMicroseconds || Infinity;
+  const aTime = comparisonResults?.astar?.runtimeMicroseconds || Infinity;
 
+  return (
+    <div className="panel algorithm-comparison-panel">
+      <div className="panel-header">
+        <h2>Algorithm Performance Comparison</h2>
+      </div>
+      
       {comparisonError && (
-        <div style={{ color: '#e74c3c', fontWeight: 'bold', textAlign: 'center', marginBottom: '20px' }}>
+        <div className="error-message">
           {comparisonError}
         </div>
       )}
 
       {comparisonResults && (
-        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-          {renderComparisonCard('Dijkstra', comparisonResults.dijkstra, true)}
-          {renderComparisonCard('A*', comparisonResults.astar, false)}
+        <div className="comparison-cards">
+          {renderComparisonCard('Dijkstra', comparisonResults.dijkstra, dTime <= aTime)}
+          {renderComparisonCard('A*', comparisonResults.astar, aTime < dTime)}
         </div>
       )}
     </div>
