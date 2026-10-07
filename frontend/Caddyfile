@@ -1,0 +1,14 @@
+{
+    auto_https off
+}
+
+:{$PORT:80} {
+    root * /srv
+    file_server
+
+    handle /health {
+        respond "OK" 200
+    }
+
+    try_files {path} /index.html
+}

@@ -1,0 +1,7 @@
+build/
+.git/
+data/montreal/*.pbf
+data/montreal/*.osm.pbf
+data/montreal/*.bin
+frontend/node_modules/
+frontend/dist/

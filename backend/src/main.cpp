@@ -241,7 +241,14 @@ int main(int argc, char** argv) {
 
     std::cout << "Starting API server in " << cityMode << " mode...\n";
     api::HttpServer server(network, engine, pbfFile);
-    server.listen("127.0.0.1", 8400);
+    
+    int port = 8400;
+    if (const char* port_env = std::getenv("PORT")) {
+        port = std::stoi(port_env);
+    }
+    
+    std::cout << "Listening on 0.0.0.0:" << port << "\n";
+    server.listen("0.0.0.0", port);
 
     return 0;
 }

@@ -25,7 +25,9 @@ void HttpServer::listen(const char* host, int port) {
     httplib::Server svr;
 
     auto set_cors_headers = [](httplib::Response& res) {
-        res.set_header("Access-Control-Allow-Origin", "*");
+        const char* origin_env = std::getenv("FRONTEND_ORIGIN");
+        std::string origin = origin_env ? std::string(origin_env) : "http://localhost:5173";
+        res.set_header("Access-Control-Allow-Origin", origin);
         res.set_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
         res.set_header("Access-Control-Allow-Headers", "Content-Type");
     };
