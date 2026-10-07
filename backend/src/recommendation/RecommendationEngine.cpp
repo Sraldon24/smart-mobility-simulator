@@ -8,6 +8,10 @@ ScoredCandidate RecommendationEngine::scoreCandidate(
     const CandidateSetMetrics& setMetrics, 
     const UserProfile& profile
 ) {
+    // EDUCATIONAL NOTE: Min-Max Normalization
+    // WHY: We need to combine different units (seconds, meters, congestion factor, dollars).
+    // HOW: We map every value to a [0.0, 1.0] scale relative to the other candidates in the set.
+    // A value of 0.0 means it is the best (lowest) in the set, 1.0 means it is the worst.
     auto normalize = [](double val, double minVal, double maxVal) {
         if (maxVal - minVal <= 1e-6) return 0.0;
         return (val - minVal) / (maxVal - minVal);
@@ -25,6 +29,9 @@ ScoredCandidate RecommendationEngine::scoreCandidate(
     scored.normalizedTraffic = normalizedCong;
     scored.normalizedCost = normalizedCost;
 
+    // EDUCATIONAL NOTE: Multi-Objective Weighted Scoring
+    // User preferences (profile weights) are applied to the normalized values.
+    // Lower score is better. If a user sets a weight to 0.0, that factor is ignored.
     scored.timeContribution = profile.timeWeight * normalizedTime;
     scored.distanceContribution = profile.distanceWeight * normalizedDist;
     scored.trafficContribution = profile.trafficWeight * normalizedCong;

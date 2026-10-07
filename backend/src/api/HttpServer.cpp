@@ -5,6 +5,7 @@
 #include "recommendation/RouteCandidateGenerator.hpp"
 #include "model/GeneratedCityLoader.hpp"
 #include "model/MontrealOSMLoader.hpp"
+#include "metrics/MetricsCollector.hpp"
 #include <httplib.h>
 #include <nlohmann/json.hpp>
 #include <iostream>
@@ -13,6 +14,11 @@ using json = nlohmann::json;
 
 namespace api {
 
+// EDUCATIONAL NOTE: Thin API Layer Architecture
+// WHY: We want the core C++ backend to be completely decoupled from HTTP concerns.
+// HOW: HttpServer acts as a simple translation layer. It parses JSON, calls native C++
+// functions on the injected model::RoadNetwork or simulation::SimulationEngine, and
+// serializes the C++ structs back into JSON. There is NO business logic in this file.
 HttpServer::HttpServer(model::RoadNetwork& network, simulation::SimulationEngine& engine, const std::string& pbfPath) : network(network), engine(engine), pbfPath(pbfPath) {}
 
 void HttpServer::listen(const char* host, int port) {
@@ -75,7 +81,7 @@ void HttpServer::listen(const char* host, int port) {
             auto body = json::parse(req.body);
             if (!body.contains("mode")) {
                 res.status = 400;
-                res.set_content(json{{"error", "Missing mode parameter"}}.dump(), "application/json");
+                res.set_content(json{{"error", {{"code", "BAD_REQUEST"}, {"message", "Missing mode parameter"}}}}.dump(), "application/json");
                 return;
             }
             std::string mode = body["mode"];
@@ -84,22 +90,23 @@ void HttpServer::listen(const char* host, int port) {
                 network = loader.load(pbfPath);
                 if (network.getNodes().empty()) {
                     res.status = 500;
-                    res.set_content(json{{"error", "Failed to load Montreal OSM graph"}}.dump(), "application/json");
+                    res.set_content(json{{"error", {{"code", "INTERNAL_ERROR"}, {"message", "Failed to load Montreal OSM graph"}}}}.dump(), "application/json");
                     return;
                 }
             } else if (mode == "generated") {
                 network = model::GeneratedCityLoader::generate5x5Grid();
             } else {
                 res.status = 400;
-                res.set_content(json{{"error", "Invalid mode"}}.dump(), "application/json");
+                res.set_content(json{{"error", {{"code", "BAD_REQUEST"}, {"message", "Invalid mode"}}}}.dump(), "application/json");
                 return;
             }
             engine.reset();
+            metrics::MetricsCollector::getInstance().setCityMode(mode);
             res.status = 200;
             res.set_content(json{{"status", "success"}}.dump(), "application/json");
         } catch (...) {
             res.status = 400;
-            res.set_content(json{{"error", "Malformed request"}}.dump(), "application/json");
+            res.set_content(json{{"error", {{"code", "BAD_REQUEST"}, {"message", "Malformed request"}}}}.dump(), "application/json");
         }
     });
 
@@ -108,7 +115,7 @@ void HttpServer::listen(const char* host, int port) {
         
         if (!req.has_param("start") || !req.has_param("end")) {
             res.status = 400;
-            json err = {{"error", "Missing 'start' or 'end' parameter"}};
+            json err = {{"error", {{"code", "BAD_REQUEST"}, {"message", "Missing 'start' or 'end' parameter"}}}};
             res.set_content(err.dump(), "application/json");
             return;
         }
@@ -134,7 +141,7 @@ void HttpServer::listen(const char* host, int port) {
                 algo = routing::RoutingAlgorithm::AStar;
             } else {
                 res.status = 400;
-                json err = {{"error", "invalid routing algorithm"}};
+                json err = {{"error", {{"code", "BAD_REQUEST"}, {"message", "invalid routing algorithm"}}}};
                 res.set_content(err.dump(), "application/json");
                 return;
             }
@@ -148,12 +155,16 @@ void HttpServer::listen(const char* host, int port) {
                 obj = routing::RoutingObjective::LeastTraffic;
             } else {
                 res.status = 400;
-                json err = {{"error", "invalid routing objective"}};
+                json err = {{"error", {{"code", "BAD_REQUEST"}, {"message", "invalid routing objective"}}}};
                 res.set_content(err.dump(), "application/json");
                 return;
             }
 
             auto result = routing::Router::findRoute(network, start, end, algo, obj);
+            
+            if (result.found) {
+                metrics::MetricsCollector::getInstance().recordRouteResult(algoStr, result);
+            }
             
             json j;
             j["found"] = result.found;
@@ -176,9 +187,25 @@ void HttpServer::listen(const char* host, int port) {
             res.set_content(j.dump(), "application/json");
         } catch (const std::exception& e) {
             res.status = 400;
-            json err = {{"error", "Invalid parameter format"}};
+            json err = {{"error", {{"code", "BAD_REQUEST"}, {"message", "Invalid parameter format"}}}};
             res.set_content(err.dump(), "application/json");
         }
+    });
+
+    svr.Get("/metrics", [&](const httplib::Request& req, httplib::Response& res) {
+        set_cors_headers(res);
+        auto snapshot = metrics::MetricsCollector::getInstance().getSnapshot();
+        json j = snapshot.toJson();
+        
+        if (req.has_param("history") && req.get_param_value("history") == "true") {
+            auto history = metrics::MetricsCollector::getInstance().getHistory();
+            j["history"] = json::array();
+            for (const auto& snap : history) {
+                j["history"].push_back(snap.toJson());
+            }
+        }
+        
+        res.set_content(j.dump(), "application/json");
     });
 
     svr.Get("/profiles", [&](const httplib::Request&, httplib::Response& res) {
@@ -210,7 +237,7 @@ void HttpServer::listen(const char* host, int port) {
         
         if (!req.has_param("start") || !req.has_param("end")) {
             res.status = 400;
-            json err = {{"error", "Missing 'start' or 'end' parameter"}};
+            json err = {{"error", {{"code", "BAD_REQUEST"}, {"message", "Missing 'start' or 'end' parameter"}}}};
             res.set_content(err.dump(), "application/json");
             return;
         }
@@ -228,7 +255,7 @@ void HttpServer::listen(const char* host, int port) {
             
             if (candidates.empty()) {
                 res.status = 404;
-                res.set_content(json{{"error", "No route found"}}.dump(), "application/json");
+                res.set_content(json{{"error", {{"code", "NOT_FOUND"}, {"message", "No route found"}}}}.dump(), "application/json");
                 return;
             }
 
@@ -274,7 +301,7 @@ void HttpServer::listen(const char* host, int port) {
 
         } catch (...) {
             res.status = 400;
-            res.set_content(json{{"error", "Invalid parameter format"}}.dump(), "application/json");
+            res.set_content(json{{"error", {{"code", "BAD_REQUEST"}, {"message", "Invalid parameter format"}}}}.dump(), "application/json");
         }
     });
 
@@ -283,7 +310,7 @@ void HttpServer::listen(const char* host, int port) {
         
         if (!req.has_param("start") || !req.has_param("end")) {
             res.status = 400;
-            res.set_content(json{{"error", "Missing 'start' or 'end' parameter"}}.dump(), "application/json");
+            res.set_content(json{{"error", {{"code", "BAD_REQUEST"}, {"message", "Missing 'start' or 'end' parameter"}}}}.dump(), "application/json");
             return;
         }
 
@@ -295,7 +322,7 @@ void HttpServer::listen(const char* host, int port) {
             
             if (candidates.empty()) {
                 res.status = 404;
-                res.set_content(json{{"error", "No route found"}}.dump(), "application/json");
+                res.set_content(json{{"error", {{"code", "NOT_FOUND"}, {"message", "No route found"}}}}.dump(), "application/json");
                 return;
             }
 
@@ -321,7 +348,7 @@ void HttpServer::listen(const char* host, int port) {
 
         } catch (...) {
             res.status = 400;
-            res.set_content(json{{"error", "Invalid parameter format"}}.dump(), "application/json");
+            res.set_content(json{{"error", {{"code", "BAD_REQUEST"}, {"message", "Invalid parameter format"}}}}.dump(), "application/json");
         }
     });
 
@@ -427,7 +454,7 @@ void HttpServer::listen(const char* host, int port) {
             auto body = json::parse(req.body);
             if (!body.contains("from") || !body.contains("to") || !body.contains("type")) {
                 res.status = 400;
-                res.set_content(json{{"error", "Missing fields"}}.dump(), "application/json");
+                res.set_content(json{{"error", {{"code", "BAD_REQUEST"}, {"message", "Missing fields"}}}}.dump(), "application/json");
                 return;
             }
             
@@ -440,13 +467,13 @@ void HttpServer::listen(const char* host, int port) {
             else if (typeStr == "accident") type = model::IncidentType::Accident;
             else {
                 res.status = 400;
-                res.set_content(json{{"error", "Invalid incident type"}}.dump(), "application/json");
+                res.set_content(json{{"error", {{"code", "BAD_REQUEST"}, {"message", "Invalid incident type"}}}}.dump(), "application/json");
                 return;
             }
 
             if (!network.getNodeById(from) || !network.getNodeById(to)) {
                 res.status = 400;
-                res.set_content(json{{"error", "Invalid node ID"}}.dump(), "application/json");
+                res.set_content(json{{"error", {{"code", "BAD_REQUEST"}, {"message", "Invalid node ID"}}}}.dump(), "application/json");
                 return;
             }
 
@@ -460,11 +487,11 @@ void HttpServer::listen(const char* host, int port) {
                 res.set_content(response.dump(), "application/json");
             } else {
                 res.status = 400;
-                res.set_content(json{{"error", "Incident already exists or road not found"}}.dump(), "application/json");
+                res.set_content(json{{"error", {{"code", "NOT_FOUND"}, {"message", "Incident already exists or road not found"}}}}.dump(), "application/json");
             }
         } catch (const std::exception& e) {
             res.status = 400;
-            res.set_content(json{{"error", "Malformed request"}}.dump(), "application/json");
+            res.set_content(json{{"error", {{"code", "BAD_REQUEST"}, {"message", "Malformed request"}}}}.dump(), "application/json");
         }
     });
 
@@ -474,7 +501,7 @@ void HttpServer::listen(const char* host, int port) {
             auto body = json::parse(req.body);
             if (!body.contains("from") || !body.contains("to")) {
                 res.status = 400;
-                res.set_content(json{{"error", "Missing fields"}}.dump(), "application/json");
+                res.set_content(json{{"error", {{"code", "BAD_REQUEST"}, {"message", "Missing fields"}}}}.dump(), "application/json");
                 return;
             }
             
@@ -490,11 +517,11 @@ void HttpServer::listen(const char* host, int port) {
                 res.set_content(response.dump(), "application/json");
             } else {
                 res.status = 404;
-                res.set_content(json{{"error", "Incident not found"}}.dump(), "application/json");
+                res.set_content(json{{"error", {{"code", "NOT_FOUND"}, {"message", "Incident not found"}}}}.dump(), "application/json");
             }
         } catch (const std::exception& e) {
             res.status = 400;
-            res.set_content(json{{"error", "Malformed request"}}.dump(), "application/json");
+            res.set_content(json{{"error", {{"code", "BAD_REQUEST"}, {"message", "Malformed request"}}}}.dump(), "application/json");
         }
     });
 
@@ -504,7 +531,7 @@ void HttpServer::listen(const char* host, int port) {
             auto body = json::parse(req.body);
             if (!body.contains("origin") || !body.contains("destination")) {
                 res.status = 400;
-                res.set_content(json{{"error", "Missing origin or destination"}}.dump(), "application/json");
+                res.set_content(json{{"error", {{"code", "BAD_REQUEST"}, {"message", "Missing origin or destination"}}}}.dump(), "application/json");
                 return;
             }
             int origin = body["origin"];
@@ -517,7 +544,7 @@ void HttpServer::listen(const char* host, int port) {
             int id = engine.spawnVehicle(origin, dest, prefStr);
             if (id == -1) {
                 res.status = 400;
-                res.set_content(json{{"error", "Could not spawn vehicle. Invalid nodes or no route."}}.dump(), "application/json");
+                res.set_content(json{{"error", {{"code", "BAD_REQUEST"}, {"message", "Could not spawn vehicle. Invalid nodes or no route."}}}}.dump(), "application/json");
                 return;
             }
             
@@ -545,7 +572,7 @@ void HttpServer::listen(const char* host, int port) {
             }
         } catch (...) {
             res.status = 400;
-            res.set_content(json{{"error", "Malformed request"}}.dump(), "application/json");
+            res.set_content(json{{"error", {{"code", "BAD_REQUEST"}, {"message", "Malformed request"}}}}.dump(), "application/json");
         }
     });
 
@@ -606,7 +633,7 @@ void HttpServer::listen(const char* host, int port) {
             res.set_content(j.dump(), "application/json");
         } catch (...) {
             res.status = 400;
-            res.set_content(json{{"error", "Malformed request"}}.dump(), "application/json");
+            res.set_content(json{{"error", {{"code", "BAD_REQUEST"}, {"message", "Malformed request"}}}}.dump(), "application/json");
         }
     });
 
@@ -656,7 +683,7 @@ void HttpServer::listen(const char* host, int port) {
             res.set_content(j.dump(), "application/json");
         } catch (...) {
             res.status = 400;
-            res.set_content(json{{"error", "Malformed request"}}.dump(), "application/json");
+            res.set_content(json{{"error", {{"code", "BAD_REQUEST"}, {"message", "Malformed request"}}}}.dump(), "application/json");
         }
     });
 

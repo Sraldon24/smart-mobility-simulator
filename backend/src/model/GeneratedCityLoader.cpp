@@ -49,6 +49,7 @@ RoadNetwork GeneratedCityLoader::generate5x5Grid() {
         }
     }
 
+    network.buildIndex();
     return network;
 }
 

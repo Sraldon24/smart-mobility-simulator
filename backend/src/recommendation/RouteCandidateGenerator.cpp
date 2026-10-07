@@ -46,10 +46,18 @@ std::vector<RouteCandidate> RouteCandidateGenerator::generateCandidates(
         return candidates;
     }
 
+    // EDUCATIONAL NOTE: Ensemble Generation
+    // WHY: Instead of a complex multi-objective pathfinding algorithm (which is NP-hard),
+    // we use a simpler ensemble approach: generate extreme edge-cases (fastest, shortest, least traffic)
+    // and let the recommendation engine score and pick among these valid candidates.
     auto rShortest = routing::Router::findRoute(network, startNodeId, destNodeId, routing::RoutingAlgorithm::AStar, routing::RoutingObjective::Shortest);
     auto rFastest = routing::Router::findRoute(network, startNodeId, destNodeId, routing::RoutingAlgorithm::AStar, routing::RoutingObjective::Fastest);
     auto rLeastTraffic = routing::Router::findRoute(network, startNodeId, destNodeId, routing::RoutingAlgorithm::AStar, routing::RoutingObjective::LeastTraffic);
 
+    // EDUCATIONAL NOTE: Deduplication
+    // HOW: We do an O(N) linear search through existing candidates.
+    // Since N is extremely small (max 3), a linear search over vectors is faster
+    // than the overhead of allocating and hashing std::unordered_set.
     auto addIfValidAndUnique = [&](const routing::RouteResult& res, const std::string& objStr) {
         if (!res.found) return;
         

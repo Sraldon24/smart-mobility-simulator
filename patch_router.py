@@ -1,17 +1,12 @@
-#include "routing/Router.hpp"
-#include <queue>
-#include <unordered_map>
-#include <unordered_set>
-#include <limits>
-#include <algorithm>
-#include <cmath>
-#include <chrono>
-#include "utils/Timer.hpp"
-#include "utils/Logger.hpp"
+import re
 
-namespace routing {
+with open('backend/src/routing/Router.cpp', 'r') as f:
+    content = f.read()
 
-RouteResult Router::findRouteDijkstra(const model::RoadNetwork& network, int startNodeId, int destNodeId, RoutingObjective objective) {
+# Replace findRouteDijkstra
+dij_old = r'''RouteResult Router::findRouteDijkstra\(const model::RoadNetwork& network, int startNodeId, int destNodeId, RoutingObjective objective\) \{.*?return RouteResult\{true, path, totalDist, totalTime, nodesExplored, runtime\};\n\}'''
+
+dij_new = '''RouteResult Router::findRouteDijkstra(const model::RoadNetwork& network, int startNodeId, int destNodeId, RoutingObjective objective) {
     auto startTime = std::chrono::steady_clock::now();
     std::size_t nodesExplored = 0;
 
@@ -32,21 +27,9 @@ RouteResult Router::findRouteDijkstra(const model::RoadNetwork& network, int sta
     if (nodeCount > 0) maxId = network.getNodes().back().id;
     size_t vecSize = std::max(nodeCount, static_cast<size_t>(maxId + 1));
 
-/*
- * Dijkstra's Algorithm Overview:
- * Complexity: O((V + E) log V) where V = nodes, E = edges.
- * 
- * 1. Start node distance is 0. All others are effectively infinity.
- * 2. Repeatedly pull the "cheapest known node" from a Priority Queue.
- * 3. "Relax" outgoing edges: check if going through this node offers
- *    a cheaper path to the neighbor than the neighbor's current best path.
- * 4. Record predecessor for path reconstruction.
- */
     std::vector<double> dist(vecSize, std::numeric_limits<double>::infinity());
     std::vector<const model::Road*> prevRoad(vecSize, nullptr);
     
-    // priority_queue acts as the min-heap. It always keeps the node with the
-    // lowest cost at the top. This guarantees we explore shortest paths first.
     using PQueueItem = std::pair<double, int>;
     std::priority_queue<PQueueItem, std::vector<PQueueItem>, std::greater<PQueueItem>> pq;
 
@@ -59,10 +42,6 @@ RouteResult Router::findRouteDijkstra(const model::RoadNetwork& network, int sta
         auto [currentCost, u] = pq.top();
         pq.pop();
 
-        // Stale entry check: We cannot arbitrarily remove entries from a 
-        // std::priority_queue when a cheaper path is found. Instead, we just
-        // add the new cheaper entry. When we later pop the older, more expensive
-        // entry, we ignore it here.
         if (currentCost > dist[u]) continue;
 
         nodesExplored++;
@@ -72,8 +51,6 @@ RouteResult Router::findRouteDijkstra(const model::RoadNetwork& network, int sta
             break;
         }
 
-        // Direct adjacency lookup is O(out-degree). 
-        // Much faster than checking all edges in the graph.
         for (const model::Road* road : network.getOutgoingRoads(u)) {
             if (road->closed) continue;
             
@@ -85,9 +62,6 @@ RouteResult Router::findRouteDijkstra(const model::RoadNetwork& network, int sta
                 weight = road->distanceMeters * road->getEffectiveTrafficFactor();
             }
 
-            // Relaxation:
-            // "Is the cost to get to 'v' via 'u' cheaper than the best 
-            // cost we already know for 'v'?"
             if (dist[u] + weight < dist[v]) {
                 dist[v] = dist[u] + weight;
                 prevRoad[v] = road;
@@ -107,10 +81,6 @@ RouteResult Router::findRouteDijkstra(const model::RoadNetwork& network, int sta
     double totalTime = 0.0;
     int curr = destNodeId;
     
-    // Path reconstruction:
-    // We only stored `prevRoad` pointing backwards from the destination
-    // back to the start. We follow these pointers backward, pushing them
-    // to `path`, then `std::reverse` the vector to get the forward sequence.
     while (curr != startNodeId) {
         path.push_back(curr);
         const model::Road* road = prevRoad[curr];
@@ -125,22 +95,14 @@ RouteResult Router::findRouteDijkstra(const model::RoadNetwork& network, int sta
     auto runtime = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count();
     
     return RouteResult{true, path, totalDist, totalTime, nodesExplored, runtime};
-}
+}'''
 
-/*
- * A* Algorithm Overview:
- * A* extends Dijkstra by prioritizing nodes using an estimate of the remaining 
- * cost to the destination.
- * 
- * gScore(n) = actual cost from start to n
- * h(n) = estimated (heuristic) cost from n to destination
- * fScore(n) = gScore(n) + h(n)
- * 
- * The priority queue orders by fScore.
- * IMPORTANT: The heuristic must be 'admissible' (it must never overestimate 
- * the real cost). If it overestimates, A* might return a suboptimal route.
- */
-RouteResult Router::findRouteAStar(const model::RoadNetwork& network, int startNodeId, int destNodeId, RoutingObjective objective) {
+content = re.sub(dij_old, dij_new, content, flags=re.DOTALL)
+
+# Replace findRouteAStar
+astar_old = r'''RouteResult Router::findRouteAStar\(const model::RoadNetwork& network, int startNodeId, int destNodeId, RoutingObjective objective\) \{.*?return RouteResult\{true, path, totalDist, totalTime, nodesExplored, runtime\};\n\}'''
+
+astar_new = '''RouteResult Router::findRouteAStar(const model::RoadNetwork& network, int startNodeId, int destNodeId, RoutingObjective objective) {
     auto startTime = std::chrono::steady_clock::now();
     std::size_t nodesExplored = 0;
 
@@ -164,9 +126,11 @@ RouteResult Router::findRouteAStar(const model::RoadNetwork& network, int startN
     if (nodeCount > 0) maxId = network.getNodes().back().id;
     size_t vecSize = std::max(nodeCount, static_cast<size_t>(maxId + 1));
 
+    // Heuristic pre-calculation for node coordinates if Cartesian, or geographic
+    // To avoid `getNodeById` inside heuristic:
+    // If we rely on node array being dense:
     const auto& nodes = network.getNodes();
 
-    // Heuristic function (h) calculation
     auto heuristic = [&](int u) {
         const model::Node* n = nullptr;
         if (u >= 0 && static_cast<size_t>(u) < nodes.size() && nodes[u].id == u) {
@@ -178,9 +142,6 @@ RouteResult Router::findRouteAStar(const model::RoadNetwork& network, int startN
         
         double dist = 0.0;
         if (network.getCoordinateSystem() == model::CoordinateSystem::Geographic) {
-            // Haversine estimates great-circle distance on Earth.
-            // Raw coordinate subtraction cannot be treated as distance because 
-            // degrees of longitude physically shrink near the poles.
             constexpr double R = 6371000.0;
             constexpr double PI = 3.14159265358979323846;
             double lat1 = n->y, lon1 = n->x, lat2 = destNode->y, lon2 = destNode->x;
@@ -282,15 +243,9 @@ RouteResult Router::findRouteAStar(const model::RoadNetwork& network, int startN
     auto runtime = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count();
 
     return RouteResult{true, path, totalDist, totalTime, nodesExplored, runtime};
-}
+}'''
 
-RouteResult Router::findRoute(const model::RoadNetwork& network, int startNodeId, int destNodeId, RoutingAlgorithm algorithm, RoutingObjective objective) {
-    if (algorithm == RoutingAlgorithm::Dijkstra) {
-        return findRouteDijkstra(network, startNodeId, destNodeId, objective);
-    } else if (algorithm == RoutingAlgorithm::AStar) {
-        return findRouteAStar(network, startNodeId, destNodeId, objective);
-    }
-    return RouteResult{false, {}, 0.0, 0.0, 0, 0};
-}
+content = re.sub(astar_old, astar_new, content, flags=re.DOTALL)
 
-} // namespace routing
+with open('backend/src/routing/Router.cpp', 'w') as f:
+    f.write(content)

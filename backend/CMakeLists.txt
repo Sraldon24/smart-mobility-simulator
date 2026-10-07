@@ -68,3 +68,19 @@ target_link_libraries(run_tests PRIVATE Catch2::Catch2WithMain nlohmann_json::nl
 
 include(Catch)
 catch_discover_tests(run_tests)
+
+add_executable(run_benchmarks
+    benchmarks/benchmark_main.cpp
+    src/model/RoadNetwork.cpp
+    src/model/GeneratedCityLoader.cpp
+    src/model/MontrealOSMLoader.cpp
+    src/routing/Router.cpp
+    src/api/HttpServer.cpp
+    src/simulation/SimulationEngine.cpp
+    src/recommendation/UserProfile.cpp
+    src/recommendation/RecommendationEngine.cpp
+    src/recommendation/RouteCandidateGenerator.cpp
+    src/metrics/MetricsCollector.cpp
+)
+target_include_directories(run_benchmarks PRIVATE include)
+target_link_libraries(run_benchmarks PRIVATE nlohmann_json::nlohmann_json httplib::httplib Threads::Threads ZLIB::ZLIB EXPAT::EXPAT BZip2::BZip2 lz4)

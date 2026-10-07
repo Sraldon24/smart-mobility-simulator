@@ -9,6 +9,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <fstream>
+#include "recommendation/RouteCandidateGenerator.hpp"
 
 void printRouteResult(const routing::RouteResult& result, int start, int dest, const std::string& algo, const std::string& obj) {
     if (!result.found) {
@@ -99,7 +100,7 @@ int main(int argc, char** argv) {
             std::unordered_set<int> visited;
             q.push_back(node.id);
             visited.insert(node.id);
-            int head = 0;
+            size_t head = 0;
             
             while(head < q.size() && q.size() < 1000) {
                 int curr = q[head++];
@@ -229,6 +230,13 @@ int main(int argc, char** argv) {
     if (cityMode != "montreal") {
         runBatchTest(50);
         runBatchTest(100);
+        
+        std::cout << "\n--- Candidate Generation Test ---\n";
+        auto startCand = std::chrono::high_resolution_clock::now();
+        auto candidates = recommendation::RouteCandidateGenerator::generateCandidates(network, 0, 24);
+        auto endCand = std::chrono::high_resolution_clock::now();
+        std::cout << "Generated " << candidates.size() << " candidates in " 
+                  << std::chrono::duration_cast<std::chrono::microseconds>(endCand - startCand).count() << " us\n";
     }
 
     std::cout << "Starting API server in " << cityMode << " mode...\n";

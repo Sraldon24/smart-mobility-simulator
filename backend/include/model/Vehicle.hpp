@@ -40,6 +40,8 @@ struct Vehicle {
     double y{0.0};
     
     double timeSinceLastReroute{0.0};
+    double activeTimeSeconds{0.0};
+    double totalTripTimeSeconds{0.0};
 };
 
 } // namespace model

@@ -24,6 +24,9 @@ std::vector<Road>& RoadNetwork::getRoadsMutable() {
 }
 
 const Node* RoadNetwork::getNodeById(int id) const {
+    if (id >= 0 && static_cast<size_t>(id) < nodes.size() && nodes[id].id == id) {
+        return &nodes[id];
+    }
     auto it = std::find_if(nodes.begin(), nodes.end(), [id](const Node& n) {
         return n.id == id;
     });
@@ -35,6 +38,16 @@ const Node* RoadNetwork::getNodeById(int id) const {
 }
 
 Road* RoadNetwork::getRoadMutable(int from, int to) {
+    if (from >= 0 && static_cast<size_t>(from) < adj.size()) {
+        for (const Road* r : adj[from]) {
+            if (r->to == to) {
+                // Return mutable pointer by casting away const, since adj stores const Road* 
+                // but we own the roads. Or calculate pointer offset.
+                return const_cast<Road*>(r);
+            }
+        }
+    }
+    // Fallback if adj not built
     for (auto& road : roads) {
         if (road.from == from && road.to == to) {
             return &road;
@@ -44,6 +57,11 @@ Road* RoadNetwork::getRoadMutable(int from, int to) {
 }
 
 const Road* RoadNetwork::getRoad(int from, int to) const {
+    if (from >= 0 && static_cast<size_t>(from) < adj.size()) {
+        for (const Road* r : adj[from]) {
+            if (r->to == to) return r;
+        }
+    }
     for (const auto& road : roads) {
         if (road.from == from && road.to == to) {
             return &road;
@@ -126,4 +144,32 @@ const std::vector<Incident>& RoadNetwork::getIncidents() const {
     return incidents;
 }
 
+
+void RoadNetwork::buildIndex() {
+    int maxNodeId = -1;
+    for (const auto& node : nodes) {
+        maxNodeId = std::max(maxNodeId, node.id);
+    }
+    
+    if (maxNodeId >= 0) {
+        adj.assign(maxNodeId + 1, std::vector<const Road*>());
+    } else {
+        adj.clear();
+    }
+    
+    for (const auto& road : roads) {
+        if (road.from >= 0 && road.from <= maxNodeId) {
+            adj[road.from].push_back(&road);
+        }
+    }
+}
+
+const std::vector<const Road*>& RoadNetwork::getOutgoingRoads(int nodeId) const {
+    if (nodeId >= 0 && static_cast<size_t>(nodeId) < adj.size()) {
+        return adj[nodeId];
+    }
+    return emptyRoads;
+}
+
 } // namespace model
+

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import CityMap from './components/CityMap'
 import MontrealMap from './components/MontrealMap'
+import AnalyticsDashboard from './components/AnalyticsDashboard'
 
 function App() {
   const [cityMode, setCityMode] = useState('generated')
@@ -930,6 +931,9 @@ function App() {
           )}
         </div>
       )}
+
+      {/* Analytics Dashboard */}
+      <AnalyticsDashboard />
 
     </div>
   )

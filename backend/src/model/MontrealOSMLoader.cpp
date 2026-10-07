@@ -8,10 +8,13 @@
 #include <osmium/handler/node_locations_for_ways.hpp>
 #include <chrono>
 #include <iostream>
+#include "utils/Timer.hpp"
+#include "utils/Logger.hpp"
 #include <unordered_set>
 #include <unordered_map>
 #include <cmath>
 #include <string>
+#include <fstream>
 
 namespace smart_mobility {
 namespace model {
@@ -50,6 +53,10 @@ public:
     int samplesPrinted = 0;
     ::model::RoadNetwork network;
     
+    // EDUCATIONAL NOTE: Sparse-to-Dense ID Mapping
+    // WHY: OpenStreetMap uses sparse 64-bit IDs for nodes. Our backend uses dense 32-bit integer arrays
+    // for O(1) lookups and memory locality (vectors vs maps).
+    // HOW: We map every observed 64-bit OSM ID to a dense, monotonically increasing 32-bit internal ID.
     std::unordered_map<osmium::object_id_type, int> osmNodeToInternalId;
     int nextInternalNodeId = 0;
 
@@ -193,9 +200,46 @@ MontrealOSMLoader::MontrealOSMLoader() {}
 MontrealOSMLoader::~MontrealOSMLoader() {}
 
 ::model::RoadNetwork MontrealOSMLoader::load(const std::string& pbfFilePath) {
+    utils::ScopedTimer timer("MontrealOSMLoader", "load");
     auto start = std::chrono::high_resolution_clock::now();
     ::model::RoadNetwork network;
     network.setCoordinateSystem(::model::CoordinateSystem::Geographic);
+
+    std::string cacheFilePath = pbfFilePath + ".bin";
+    
+    // EDUCATIONAL NOTE: Binary Caching Optimization
+    // WHY: Parsing OSM PBF files involves complex decompression, protobuf decoding,
+    // and random memory access for node locations. This can take several seconds.
+    // HOW: After the first successful parse, we dump our dense std::vector structs
+    // directly to disk as binary. Subsequent loads skip parsing entirely and just
+    // raw-copy the binary data into memory in milliseconds.
+    // Try to load from binary cache first
+    std::ifstream cacheIn(cacheFilePath, std::ios::binary);
+    if (cacheIn) {
+        size_t nodeCount = 0;
+        cacheIn.read(reinterpret_cast<char*>(&nodeCount), sizeof(nodeCount));
+        std::vector<::model::Node> nodes(nodeCount);
+        if (nodeCount > 0) {
+            cacheIn.read(reinterpret_cast<char*>(nodes.data()), nodeCount * sizeof(::model::Node));
+        }
+
+        size_t roadCount = 0;
+        cacheIn.read(reinterpret_cast<char*>(&roadCount), sizeof(roadCount));
+        std::vector<::model::Road> roads(roadCount);
+        if (roadCount > 0) {
+            cacheIn.read(reinterpret_cast<char*>(roads.data()), roadCount * sizeof(::model::Road));
+        }
+        
+        if (cacheIn) {
+            for (const auto& n : nodes) network.addNode(n);
+            for (const auto& r : roads) network.addRoad(r);
+            network.buildIndex();
+            
+            auto end = std::chrono::high_resolution_clock::now();
+            stats.importScanTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+            return network;
+        }
+    }
 
     try {
         osmium::io::File input_file{pbfFilePath};
@@ -212,7 +256,26 @@ MontrealOSMLoader::~MontrealOSMLoader() {}
         reader.close();
 
         this->stats = handler.stats;
+        handler.network.buildIndex();
         network = std::move(handler.network);
+
+        // Save to binary cache
+        std::ofstream cacheOut(cacheFilePath, std::ios::binary);
+        if (cacheOut) {
+            const auto& nodes = network.getNodes();
+            size_t nodeCount = nodes.size();
+            cacheOut.write(reinterpret_cast<const char*>(&nodeCount), sizeof(nodeCount));
+            if (nodeCount > 0) {
+                cacheOut.write(reinterpret_cast<const char*>(nodes.data()), nodeCount * sizeof(::model::Node));
+            }
+
+            const auto& roads = network.getRoads();
+            size_t roadCount = roads.size();
+            cacheOut.write(reinterpret_cast<const char*>(&roadCount), sizeof(roadCount));
+            if (roadCount > 0) {
+                cacheOut.write(reinterpret_cast<const char*>(roads.data()), roadCount * sizeof(::model::Road));
+            }
+        }
 
     } catch (const std::exception& e) {
         std::cerr << "Failed to read OSM file: " << e.what() << "\n";

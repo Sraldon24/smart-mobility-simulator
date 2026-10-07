@@ -31,6 +31,7 @@ public:
 private:
     model::RoadNetwork& network;
     std::vector<model::Vehicle> vehicles;
+    std::vector<model::Road*> activeRoads;
     double simulationTimeSeconds{0.0};
     int nextVehicleId{1};
     int totalReroutes{0};
