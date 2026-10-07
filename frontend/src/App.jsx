@@ -373,7 +373,7 @@ export default function App() {
 
           {/* Analytics Overlay */}
           <div className="analytics-overlay">
-            <AnalyticsDashboard />
+            <AnalyticsDashboard apiUrl={API_URL} />
           </div>
         </section>
       </main>

@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Activity, Car, Route, Clock } from 'lucide-react';
 
-export default function AnalyticsDashboard() {
+export default function AnalyticsDashboard({ apiUrl }) {
   const [metrics, setMetrics] = useState(null);
   const [history, setHistory] = useState([]);
   
   useEffect(() => {
     const fetchMetrics = async () => {
       try {
-        const res = await fetch('http://localhost:8400/metrics?history=true');
+        const res = await fetch(`${apiUrl}/metrics?history=true`);
         if (res.ok) {
           const data = await res.json();
           setMetrics(data);
@@ -24,7 +24,7 @@ export default function AnalyticsDashboard() {
     fetchMetrics();
     const interval = setInterval(fetchMetrics, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [apiUrl]);
 
   if (!metrics) return null;
 
