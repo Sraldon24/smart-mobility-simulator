@@ -21,7 +21,12 @@ find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(EXPAT REQUIRED)
 find_package(BZip2 REQUIRED)
-# lz4 does not usually have a built-in find_package, so we use pkg-config or target_link_libraries directly.
+find_package(lz4 CONFIG QUIET)
+if(NOT TARGET lz4::lz4)
+    find_library(LZ4_LIBRARY NAMES lz4 REQUIRED)
+    add_library(lz4::lz4 UNKNOWN IMPORTED)
+    set_target_properties(lz4::lz4 PROPERTIES IMPORTED_LOCATION "${LZ4_LIBRARY}")
+endif()
 
 add_executable(smart_mobility_backend
     src/main.cpp
@@ -37,7 +42,7 @@ add_executable(smart_mobility_backend
     src/metrics/MetricsCollector.cpp
 )
 target_include_directories(smart_mobility_backend PRIVATE include)
-target_link_libraries(smart_mobility_backend PRIVATE nlohmann_json::nlohmann_json httplib::httplib Threads::Threads ZLIB::ZLIB EXPAT::EXPAT BZip2::BZip2 lz4)
+target_link_libraries(smart_mobility_backend PRIVATE nlohmann_json::nlohmann_json httplib::httplib Threads::Threads ZLIB::ZLIB EXPAT::EXPAT BZip2::BZip2 lz4::lz4)
 if(MSVC)
     target_compile_definitions(smart_mobility_backend PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
@@ -72,7 +77,7 @@ add_executable(run_tests
     src/metrics/MetricsCollector.cpp
 )
 target_include_directories(run_tests PRIVATE include)
-target_link_libraries(run_tests PRIVATE Catch2::Catch2WithMain nlohmann_json::nlohmann_json httplib::httplib Threads::Threads ZLIB::ZLIB EXPAT::EXPAT BZip2::BZip2 lz4)
+target_link_libraries(run_tests PRIVATE Catch2::Catch2WithMain nlohmann_json::nlohmann_json httplib::httplib Threads::Threads ZLIB::ZLIB EXPAT::EXPAT BZip2::BZip2 lz4::lz4)
 if(MSVC)
     target_compile_definitions(run_tests PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
@@ -94,7 +99,7 @@ add_executable(run_benchmarks
     src/metrics/MetricsCollector.cpp
 )
 target_include_directories(run_benchmarks PRIVATE include)
-target_link_libraries(run_benchmarks PRIVATE nlohmann_json::nlohmann_json httplib::httplib Threads::Threads ZLIB::ZLIB EXPAT::EXPAT BZip2::BZip2 lz4)
+target_link_libraries(run_benchmarks PRIVATE nlohmann_json::nlohmann_json httplib::httplib Threads::Threads ZLIB::ZLIB EXPAT::EXPAT BZip2::BZip2 lz4::lz4)
 if(MSVC)
     target_compile_definitions(run_benchmarks PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
