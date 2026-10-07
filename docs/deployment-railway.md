@@ -130,7 +130,7 @@ docker run -p 8400:8400 \
 docker build -t smart-mobility-frontend \
   --build-arg VITE_API_URL=http://localhost:8400 \
   ./frontend
-docker run -p 3000:80 smart-mobility-frontend
+docker run -p 3000:3000 smart-mobility-frontend
 ```
 
 Then open `http://localhost:3000` and verify the app connects to the backend.
@@ -159,4 +159,3 @@ Browser─┼──▶│  Frontend        │                   │
         │                                           │
         └───────────────────────────────────────────┘
 ```
-

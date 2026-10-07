@@ -5,15 +5,15 @@
 }
 
 :{$PORT:3000} {
-    rewrite /health /health
-
     root * /srv
     encode gzip
-    file_server
 
     handle /health {
         respond "OK" 200
     }
 
-    try_files {path} /index.html
+    handle {
+        try_files {path} /index.html
+        file_server
+    }
 }
