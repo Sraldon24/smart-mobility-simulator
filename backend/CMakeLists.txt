@@ -1,5 +1,10 @@
 include(FetchContent)
 
+if(WIN32)
+    # Match libosmium's Windows requirements before any Windows headers load.
+    add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
+endif()
+
 # Fetch nlohmann/json
 FetchContent_Declare(json
     URL https://github.com/nlohmann/json/releases/download/v3.11.2/json.tar.xz

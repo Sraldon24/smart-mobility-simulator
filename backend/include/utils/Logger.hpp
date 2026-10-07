@@ -8,10 +8,10 @@
 namespace utils {
 
 enum class LogLevel {
-    DEBUG,
-    INFO,
-    WARN,
-    ERROR
+    Debug,
+    Info,
+    Warn,
+    Error
 };
 
 class Logger {
@@ -28,13 +28,13 @@ public:
 
         std::string levelStr;
         switch (level) {
-            case LogLevel::DEBUG: levelStr = "DEBUG"; break;
-            case LogLevel::INFO:  levelStr = "INFO "; break;
-            case LogLevel::WARN:  levelStr = "WARN "; break;
-            case LogLevel::ERROR: levelStr = "ERROR"; break;
+            case LogLevel::Debug: levelStr = "DEBUG"; break;
+            case LogLevel::Info:  levelStr = "INFO "; break;
+            case LogLevel::Warn:  levelStr = "WARN "; break;
+            case LogLevel::Error: levelStr = "ERROR"; break;
         }
 
-        std::ostream& out = (level == LogLevel::ERROR) ? std::cerr : std::cout;
+        std::ostream& out = (level == LogLevel::Error) ? std::cerr : std::cout;
         
         out << "[" << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %H:%M:%S") << "] "
             << "[" << levelStr << "] "
@@ -43,13 +43,12 @@ public:
     }
 
 private:
-    static inline LogLevel currentLevel = LogLevel::INFO;
+    static inline LogLevel currentLevel = LogLevel::Info;
 };
 
 } // namespace utils
 
-#define LOG_DEBUG(prefix, msg) utils::Logger::log(utils::LogLevel::DEBUG, prefix, msg)
-#define LOG_INFO(prefix, msg)  utils::Logger::log(utils::LogLevel::INFO, prefix, msg)
-#define LOG_WARN(prefix, msg)  utils::Logger::log(utils::LogLevel::WARN, prefix, msg)
-#define LOG_ERROR(prefix, msg) utils::Logger::log(utils::LogLevel::ERROR, prefix, msg)
-
+#define LOG_DEBUG(prefix, msg) utils::Logger::log(utils::LogLevel::Debug, prefix, msg)
+#define LOG_INFO(prefix, msg)  utils::Logger::log(utils::LogLevel::Info, prefix, msg)
+#define LOG_WARN(prefix, msg)  utils::Logger::log(utils::LogLevel::Warn, prefix, msg)
+#define LOG_ERROR(prefix, msg) utils::Logger::log(utils::LogLevel::Error, prefix, msg)
