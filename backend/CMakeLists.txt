@@ -12,10 +12,17 @@ FetchContent_Declare(httplib
 )
 FetchContent_MakeAvailable(httplib)
 
+find_package(Threads REQUIRED)
+find_package(ZLIB REQUIRED)
+find_package(EXPAT REQUIRED)
+find_package(BZip2 REQUIRED)
+# lz4 does not usually have a built-in find_package, so we use pkg-config or target_link_libraries directly.
+
 add_executable(smart_mobility_backend
     src/main.cpp
     src/model/RoadNetwork.cpp
     src/model/GeneratedCityLoader.cpp
+    src/model/MontrealOSMLoader.cpp
     src/routing/Router.cpp
     src/api/HttpServer.cpp
     src/simulation/SimulationEngine.cpp
@@ -24,7 +31,7 @@ add_executable(smart_mobility_backend
     src/recommendation/RouteCandidateGenerator.cpp
 )
 target_include_directories(smart_mobility_backend PRIVATE include)
-target_link_libraries(smart_mobility_backend PRIVATE nlohmann_json::nlohmann_json httplib::httplib)
+target_link_libraries(smart_mobility_backend PRIVATE nlohmann_json::nlohmann_json httplib::httplib Threads::Threads ZLIB::ZLIB EXPAT::EXPAT BZip2::BZip2 lz4)
 
 add_executable(test_recommendation
     src/test_recommendation.cpp

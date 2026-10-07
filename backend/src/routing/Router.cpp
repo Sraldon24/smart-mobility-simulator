@@ -133,12 +133,34 @@ RouteResult Router::findRouteAStar(const model::RoadNetwork& network, int startN
     auto heuristic = [&](int u) {
         const model::Node* n = network.getNodeById(u);
         if (!n) return 0.0;
-        double dx = n->x - destNode->x;
-        double dy = n->y - destNode->y;
-        double dist = std::sqrt(dx*dx + dy*dy);
+        
+        double dist = 0.0;
+        if (network.getCoordinateSystem() == model::CoordinateSystem::Geographic) {
+            constexpr double R = 6371000.0;
+            constexpr double PI = 3.14159265358979323846;
+            double lat1 = n->y, lon1 = n->x, lat2 = destNode->y, lon2 = destNode->x;
+            double dLat = (lat2 - lat1) * PI / 180.0;
+            double dLon = (lon2 - lon1) * PI / 180.0;
+            lat1 = lat1 * PI / 180.0;
+            lat2 = lat2 * PI / 180.0;
+            double a = std::sin(dLat / 2) * std::sin(dLat / 2) +
+                       std::sin(dLon / 2) * std::sin(dLon / 2) * std::cos(lat1) * std::cos(lat2);
+            double c = 2 * std::atan2(std::sqrt(a), std::sqrt(1 - a));
+            dist = R * c;
+        } else {
+            double dx = n->x - destNode->x;
+            double dy = n->y - destNode->y;
+            dist = std::sqrt(dx*dx + dy*dy);
+        }
+
         if (objective == RoutingObjective::Fastest) {
-            // Assume max speed limit of 50 km/h and free traffic (1.0) for admissible heuristic
-            return dist / (50.0 / 3.6);
+            if (network.getCoordinateSystem() == model::CoordinateSystem::Geographic) {
+                // Safe max speed for Montreal is 120 km/h
+                return dist / (120.0 / 3.6);
+            } else {
+                // Generated city uses 50 km/h max
+                return dist / (50.0 / 3.6);
+            }
         } else if (objective == RoutingObjective::LeastTraffic) {
             // effective traffic factor is >= 1.0, so distance * 1.0 is admissible
             return dist;

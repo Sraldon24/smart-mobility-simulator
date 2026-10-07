@@ -7,7 +7,7 @@ Dijkstra (Fastest) Route found 0 -> 24
 Total distance: 800 m
 Travel time: 57.6 s
 Nodes explored: 25
-Runtime: 75 us
+Runtime: 57 us
 
 --- Baseline Route 0 -> 24 (Shortest) ---
 Dijkstra (Shortest) Route found 0 -> 24
@@ -15,7 +15,7 @@ Dijkstra (Shortest) Route found 0 -> 24
 Total distance: 800 m
 Travel time: 122.4 s
 Nodes explored: 25
-Runtime: 60 us
+Runtime: 42 us
 
 --- 2. Add Closure on active route (1 <-> 6) ---
 Dijkstra (Fastest) Route found 0 -> 24
@@ -23,7 +23,7 @@ Dijkstra (Fastest) Route found 0 -> 24
 Total distance: 800 m
 Travel time: 57.6 s
 Nodes explored: 25
-Runtime: 60 us
+Runtime: 43 us
 
 --- 3. Add Accident on fastest route (1 <-> 6) ---
 Dijkstra (Fastest) Route found 0 -> 24
@@ -31,7 +31,7 @@ Dijkstra (Fastest) Route found 0 -> 24
 Total distance: 800 m
 Travel time: 57.6 s
 Nodes explored: 25
-Runtime: 74 us
+Runtime: 44 us
 
 --- 4. Add Accident on shortest route (1 <-> 6) ---
 Dijkstra (Shortest) Route found 0 -> 24
@@ -39,7 +39,7 @@ Dijkstra (Shortest) Route found 0 -> 24
 Total distance: 800 m
 Travel time: 122.4 s
 Nodes explored: 25
-Runtime: 56 us
+Runtime: 40 us
 
 --- 5. Add Incident on unused road (20 <-> 21) ---
 Dijkstra (Fastest) Route found 0 -> 24
@@ -47,18 +47,21 @@ Dijkstra (Fastest) Route found 0 -> 24
 Total distance: 800 m
 Travel time: 57.6 s
 Nodes explored: 25
-Runtime: 57 us
+Runtime: 41 us
 
 
---- MVP 4 Step 1: Simulation Engine Deterministic Test ---
-Spawned Vehicle 1 (0 -> 24)
-Spawned Vehicle 2 (4 -> 20)
-Spawned Vehicle 3 (20 -> 4)
-Simulation time advanced by 1.0s. Current time: 1s
-Total active vehicles: 3
- - Vehicle ID 1 from 0 to 24 route size: 9
- - Vehicle ID 2 from 4 to 20 route size: 9
- - Vehicle ID 3 from 20 to 4 route size: 9
+--- Simulation Engine Batch & Timing Test ---
+Spawned 10 / 10 vehicles.
+Update timing for 10 vehicles: 3 us
+State -> Waiting: 0, Moving: 10, Arrived: 0
 
-Starting API server...
-Starting backend API server on http://0.0.0.0:8080
+Spawned 50 / 50 vehicles.
+Update timing for 50 vehicles: 15 us
+State -> Waiting: 0, Moving: 50, Arrived: 0
+
+Spawned 100 / 100 vehicles.
+Update timing for 100 vehicles: 34 us
+State -> Waiting: 0, Moving: 100, Arrived: 0
+
+Starting API server in generated mode...
+Starting backend API server on http://127.0.0.1:8400

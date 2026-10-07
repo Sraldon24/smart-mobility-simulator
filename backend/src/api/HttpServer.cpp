@@ -3,6 +3,8 @@
 #include "recommendation/UserProfile.hpp"
 #include "recommendation/RecommendationEngine.hpp"
 #include "recommendation/RouteCandidateGenerator.hpp"
+#include "model/GeneratedCityLoader.hpp"
+#include "model/MontrealOSMLoader.hpp"
 #include <httplib.h>
 #include <nlohmann/json.hpp>
 #include <iostream>
@@ -11,7 +13,7 @@ using json = nlohmann::json;
 
 namespace api {
 
-HttpServer::HttpServer(model::RoadNetwork& network, simulation::SimulationEngine& engine) : network(network), engine(engine) {}
+HttpServer::HttpServer(model::RoadNetwork& network, simulation::SimulationEngine& engine, const std::string& pbfPath) : network(network), engine(engine), pbfPath(pbfPath) {}
 
 void HttpServer::listen(const char* host, int port) {
     httplib::Server svr;
@@ -36,13 +38,19 @@ void HttpServer::listen(const char* host, int port) {
     svr.Get("/city", [&](const httplib::Request&, httplib::Response& res) {
         set_cors_headers(res);
         json j;
+        j["coordinateSystem"] = (network.getCoordinateSystem() == model::CoordinateSystem::Geographic) ? "geographic" : "cartesian";
         j["nodes"] = json::array();
         for (const auto& node : network.getNodes()) {
-            j["nodes"].push_back({
+            json n = {
                 {"id", node.id},
                 {"x", node.x},
                 {"y", node.y}
-            });
+            };
+            if (network.getCoordinateSystem() == model::CoordinateSystem::Geographic) {
+                n["lon"] = node.x;
+                n["lat"] = node.y;
+            }
+            j["nodes"].push_back(n);
         }
         
         j["roads"] = json::array();
@@ -59,6 +67,40 @@ void HttpServer::listen(const char* host, int port) {
             });
         }
         res.set_content(j.dump(), "application/json");
+    });
+
+    svr.Post("/mode", [&](const httplib::Request& req, httplib::Response& res) {
+        set_cors_headers(res);
+        try {
+            auto body = json::parse(req.body);
+            if (!body.contains("mode")) {
+                res.status = 400;
+                res.set_content(json{{"error", "Missing mode parameter"}}.dump(), "application/json");
+                return;
+            }
+            std::string mode = body["mode"];
+            if (mode == "montreal") {
+                smart_mobility::model::MontrealOSMLoader loader;
+                network = loader.load(pbfPath);
+                if (network.getNodes().empty()) {
+                    res.status = 500;
+                    res.set_content(json{{"error", "Failed to load Montreal OSM graph"}}.dump(), "application/json");
+                    return;
+                }
+            } else if (mode == "generated") {
+                network = model::GeneratedCityLoader::generate5x5Grid();
+            } else {
+                res.status = 400;
+                res.set_content(json{{"error", "Invalid mode"}}.dump(), "application/json");
+                return;
+            }
+            engine.reset();
+            res.status = 200;
+            res.set_content(json{{"status", "success"}}.dump(), "application/json");
+        } catch (...) {
+            res.status = 400;
+            res.set_content(json{{"error", "Malformed request"}}.dump(), "application/json");
+        }
     });
 
     svr.Get("/route", [&](const httplib::Request& req, httplib::Response& res) {

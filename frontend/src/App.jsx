@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react'
 import CityMap from './components/CityMap'
+import MontrealMap from './components/MontrealMap'
 
 function App() {
+  const [cityMode, setCityMode] = useState('generated')
+  const [isLoadingMode, setIsLoadingMode] = useState(false)
   const [backendStatus, setBackendStatus] = useState('Checking...')
   const [cityData, setCityData] = useState({ nodes: [], roads: [] })
   const [incidents, setIncidents] = useState([])
@@ -76,6 +79,34 @@ function App() {
       .then(res => res.json())
       .then(data => setProfiles(data.profiles || []))
       .catch(err => console.error("Failed to load profiles:", err))
+  }
+
+  const handleCityModeChange = (mode) => {
+    setCityMode(mode)
+    setIsLoadingMode(true)
+    setRouteResult(null)
+    setComparisonResults(null)
+    setRecommendationResult(null)
+    setRerouteStatus(null)
+    setStartNode(null)
+    setDestNode(null)
+    
+    fetch(`${API_URL}/mode`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode })
+    })
+    .then(async res => {
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      fetchCityAndIncidents()
+    })
+    .catch(err => {
+      alert("Failed to change mode: " + err.message)
+    })
+    .finally(() => {
+      setIsLoadingMode(false)
+    })
   }
 
   useEffect(() => {
@@ -421,7 +452,21 @@ function App() {
       
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #ecf0f1', paddingBottom: '10px' }}>
         <h1 style={{ margin: 0 }}>Smart Mobility Simulator</h1>
-        <p style={{ margin: 0, fontWeight: 'bold' }}>Backend Status: {backendStatus}</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <label style={{ fontWeight: 'bold' }}>City Mode:</label>
+            <select 
+              value={cityMode} 
+              onChange={(e) => handleCityModeChange(e.target.value)}
+              disabled={isLoadingMode}
+              style={{ padding: '5px', borderRadius: '4px', border: '1px solid #ccc' }}
+            >
+              <option value="generated">Generated City</option>
+              <option value="montreal">Montreal</option>
+            </select>
+          </div>
+          <p style={{ margin: 0, fontWeight: 'bold' }}>Backend Status: {backendStatus}</p>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: '20px', marginTop: '20px', flexWrap: 'wrap' }}>
@@ -829,17 +874,32 @@ function App() {
         {/* Right Map Panel */}
         <div style={{ flex: '2', minWidth: '400px' }}>
           <h2 style={{ textAlign: 'center', marginTop: 0 }}>CITY VISUALIZATION</h2>
-          {cityData.nodes.length > 0 ? (
-            <CityMap 
-              nodes={cityData.nodes} 
-              roads={cityData.roads} 
-              incidents={incidents}
-              startNode={startNode} 
-              destNode={destNode}
-              routeNodeIds={routeResult?.found ? routeResult.nodeIds : []}
-              vehicles={vehicles}
-              onNodeClick={handleNodeClick}
-            />
+          {isLoadingMode ? (
+            <div style={{ textAlign: 'center', padding: '50px' }}>Loading {cityMode} map data...</div>
+          ) : cityData.nodes.length > 0 ? (
+            cityData.coordinateSystem === 'geographic' ? (
+              <MontrealMap 
+                nodes={cityData.nodes} 
+                roads={cityData.roads} 
+                incidents={incidents}
+                startNode={startNode} 
+                destNode={destNode}
+                routeNodeIds={routeResult?.found ? routeResult.nodeIds : []}
+                vehicles={vehicles}
+                onNodeClick={handleNodeClick}
+              />
+            ) : (
+              <CityMap 
+                nodes={cityData.nodes} 
+                roads={cityData.roads} 
+                incidents={incidents}
+                startNode={startNode} 
+                destNode={destNode}
+                routeNodeIds={routeResult?.found ? routeResult.nodeIds : []}
+                vehicles={vehicles}
+                onNodeClick={handleNodeClick}
+              />
+            )
           ) : (
             <p style={{ textAlign: 'center', color: '#7f8c8d' }}>Loading city data...</p>
           )}

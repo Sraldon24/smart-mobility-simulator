@@ -62,3 +62,5 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+data/montreal/*.pbf
+data/montreal/*.osm.pbf

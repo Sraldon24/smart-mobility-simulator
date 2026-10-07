@@ -22,8 +22,18 @@ struct Incident {
     bool originalClosedToFrom{false};
 };
 
+enum class CoordinateSystem {
+    Cartesian,
+    Geographic
+};
+
 class RoadNetwork {
 public:
+    RoadNetwork() = default;
+
+    CoordinateSystem getCoordinateSystem() const { return coordSystem; }
+    void setCoordinateSystem(CoordinateSystem sys) { coordSystem = sys; }
+
     void addNode(const Node& node);
     void addRoad(const Road& road);
 
@@ -43,6 +53,7 @@ public:
     const std::vector<Incident>& getIncidents() const;
 
 private:
+    CoordinateSystem coordSystem{CoordinateSystem::Cartesian};
     std::vector<Node> nodes;
     std::vector<Road> roads;
     std::vector<Incident> incidents;
