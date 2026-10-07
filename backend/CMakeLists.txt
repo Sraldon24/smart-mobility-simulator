@@ -33,6 +33,9 @@ add_executable(smart_mobility_backend
 )
 target_include_directories(smart_mobility_backend PRIVATE include)
 target_link_libraries(smart_mobility_backend PRIVATE nlohmann_json::nlohmann_json httplib::httplib Threads::Threads ZLIB::ZLIB EXPAT::EXPAT BZip2::BZip2 lz4)
+if(MSVC)
+    target_compile_definitions(smart_mobility_backend PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
 
 enable_testing()
 
@@ -65,6 +68,9 @@ add_executable(run_tests
 )
 target_include_directories(run_tests PRIVATE include)
 target_link_libraries(run_tests PRIVATE Catch2::Catch2WithMain nlohmann_json::nlohmann_json httplib::httplib Threads::Threads ZLIB::ZLIB EXPAT::EXPAT BZip2::BZip2 lz4)
+if(MSVC)
+    target_compile_definitions(run_tests PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
 
 include(Catch)
 catch_discover_tests(run_tests)
@@ -84,3 +90,6 @@ add_executable(run_benchmarks
 )
 target_include_directories(run_benchmarks PRIVATE include)
 target_link_libraries(run_benchmarks PRIVATE nlohmann_json::nlohmann_json httplib::httplib Threads::Threads ZLIB::ZLIB EXPAT::EXPAT BZip2::BZip2 lz4)
+if(MSVC)
+    target_compile_definitions(run_benchmarks PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()

@@ -39,7 +39,7 @@ jobs:
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
         run: |
-          vcpkg install zlib expat bzip2 lz4
+          vcpkg install zlib expat bzip2 lz4 libosmium protozero
 
       - name: Configure CMake
         shell: bash
