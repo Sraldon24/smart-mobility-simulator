@@ -1,144 +1,161 @@
-import React from 'react';
-
-export default function CityMap({ nodes, roads, startNode, destNode, routeNodeIds, vehicles, onNodeClick }) {
-  // Deduplicate roads visually
-  const visualRoads = [];
-  const seenRoads = new Set();
-  
-  roads.forEach(r => {
-    const min = Math.min(r.from, r.to);
-    const max = Math.max(r.from, r.to);
-    const key = `${min}-${max}`;
-    if (!seenRoads.has(key)) {
-      seenRoads.add(key);
-      visualRoads.push({...r});
-    } else {
-      const existing = visualRoads.find(vr => Math.min(vr.from, vr.to) === min && Math.max(vr.from, vr.to) === max);
-      if (existing) {
-        if (r.closed) existing.closed = true;
-        if (r.trafficFactor > existing.trafficFactor) existing.trafficFactor = r.trafficFactor;
-      }
-    }
-  });
-
-  const routeSegments = new Set();
-  if (routeNodeIds && routeNodeIds.length > 1) {
-    for (let i = 0; i < routeNodeIds.length - 1; i++) {
-      const min = Math.min(routeNodeIds[i], routeNodeIds[i + 1]);
-      const max = Math.max(routeNodeIds[i], routeNodeIds[i + 1]);
-      routeSegments.add(`${min}-${max}`);
-    }
-  }
-
-  const nodeMap = new Map();
-  nodes.forEach(n => nodeMap.set(n.id, n));
-
-  const getTrafficColor = (r) => {
-    if (r.closed) return 'var(--danger)'; 
-    if (r.trafficFactor >= 5.0) return 'var(--danger)';
-    if (r.trafficFactor >= 2.0) return 'var(--warning)';
-    if (r.trafficFactor > 1.0) return '#a371f7';
-    return 'var(--border)';
-  };
-
+import { useMemo } from "react";
+export default function CityMap({
+  nodes,
+  roads,
+  startNode,
+  destNode,
+  routeNodeIds,
+  vehicles,
+  onNodeClick,
+}) {
+  const nodeIndex = useMemo(
+    () => new Map(nodes.map((node) => [node.id, node])),
+    [nodes],
+  );
+  const visualRoads = useMemo(
+    () => [
+      ...new Map(
+        roads.map((road) => [
+          [road.from, road.to].sort((a, b) => a - b).join("-"),
+          road,
+        ]),
+      ).values(),
+    ],
+    [roads],
+  );
+  const coordinates = routeNodeIds
+    .flatMap((id) =>
+      nodeIndex.has(id)
+        ? [`${nodeIndex.get(id).x},${nodeIndex.get(id).y}`]
+        : [],
+    )
+    .join(" ");
   return (
-    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-      <svg 
-        viewBox="-50 -50 500 500" 
-        style={{ width: '100%', height: '100%', backgroundColor: '#000' }}
+    <div className="grid-map">
+      <svg
+        viewBox="-55 -55 510 510"
+        role="img"
+        aria-label="Practice city map. Choose numbered intersections for your route."
       >
-        {/* Layer 1: Base roads & Traffic/Incidents */}
-        {visualRoads.map(r => {
-          const min = Math.min(r.from, r.to);
-          const max = Math.max(r.from, r.to);
-          const key = `${min}-${max}`;
-          
-          const n1 = nodeMap.get(r.from);
-          const n2 = nodeMap.get(r.to);
-          if (!n1 || !n2) return null;
-
-          const baseColor = getTrafficColor(r);
-          const dashArray = r.closed ? "6,6" : "none";
-
-          return (
-            <line
-              key={`base-${key}`}
-              x1={n1.x} y1={n1.y} x2={n2.x} y2={n2.y}
-              stroke={baseColor}
-              strokeWidth={8}
-              strokeLinecap="round"
-              strokeDasharray={dashArray}
-            />
-          );
-        })}
-
-        {/* Layer 2: Active Route overlay */}
-        {visualRoads.map(r => {
-          const min = Math.min(r.from, r.to);
-          const max = Math.max(r.from, r.to);
-          const key = `${min}-${max}`;
-          
-          if (!routeSegments.has(key)) return null;
-
-          const n1 = nodeMap.get(r.from);
-          const n2 = nodeMap.get(r.to);
-          if (!n1 || !n2) return null;
-
-          return (
-            <line
-              key={`route-${key}`}
-              x1={n1.x} y1={n1.y} x2={n2.x} y2={n2.y}
-              stroke="var(--accent)"
-              strokeWidth={14}
-              strokeLinecap="round"
-              opacity={0.8}
-            />
-          );
-        })}
-
-        {/* Layer 3: Nodes */}
-        {nodes.map(n => {
-          let fill = 'var(--text-muted)';
-          let r = 5;
-          let stroke = 'none';
-          
-          if (n.id === startNode) { 
-            fill = 'var(--success)'; 
-            r = 12;
-            stroke = '#fff';
-          }
-          else if (n.id === destNode) { 
-            fill = 'var(--danger)'; 
-            r = 12;
-            stroke = '#fff';
-          }
-
-          return (
-            <circle
-              key={n.id}
-              cx={n.x} cy={n.y} r={r}
-              fill={fill}
-              stroke={stroke}
-              strokeWidth={2}
-              onClick={() => onNodeClick && onNodeClick(n.id)}
-              style={{ cursor: 'pointer' }}
-            >
-              <title>Node {n.id}</title>
-            </circle>
-          );
-        })}
-
-        {/* Layer 4: Vehicles */}
-        {vehicles.map(v => (
-          <circle
-            key={`v-${v.id}`}
-            cx={v.x} cy={v.y} r={6}
-            fill="#fff"
-            stroke="var(--accent)"
-            strokeWidth={2}
+        <defs>
+          <pattern
+            id="grid-dots"
+            width="20"
+            height="20"
+            patternUnits="userSpaceOnUse"
           >
-            <title>Vehicle {v.id}</title>
-          </circle>
+            <circle cx="0" cy="0" r="0.8" fill="#dbe3dd" />
+          </pattern>
+        </defs>
+        <rect x="-55" y="-55" width="510" height="510" fill="url(#grid-dots)" />
+        {[0, 1, 2, 3].flatMap((x) =>
+          [0, 1, 2, 3].map((y) => (
+            <rect
+              key={`${x}-${y}`}
+              x={x * 100 + 18}
+              y={y * 100 + 18}
+              width="64"
+              height="64"
+              rx="12"
+              fill={(x + y) % 3 === 0 ? "#e0ecdf" : "#e9eae3"}
+            />
+          )),
+        )}
+        {visualRoads.map((road) => {
+          const a = nodeIndex.get(road.from),
+            b = nodeIndex.get(road.to);
+          if (!a || !b) return null;
+          return (
+            <line
+              key={`${road.from}-${road.to}`}
+              x1={a.x}
+              y1={a.y}
+              x2={b.x}
+              y2={b.y}
+              stroke={
+                road.closed
+                  ? "#c64d48"
+                  : road.trafficFactor >= 2
+                    ? "#d89836"
+                    : "#d1d8d3"
+              }
+              strokeWidth="9"
+              strokeLinecap="round"
+              strokeDasharray={road.closed ? "5 5" : undefined}
+            />
+          );
+        })}
+        {coordinates && (
+          <polyline
+            points={coordinates}
+            fill="none"
+            stroke="#087f68"
+            strokeWidth="8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )}
+        {nodes.map((node) => (
+          <g
+            key={node.id}
+            role="button"
+            tabIndex="0"
+            aria-label={`Select point ${node.id}`}
+            onClick={() => onNodeClick(node.id)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onNodeClick(node.id);
+              }
+            }}
+            className="grid-node"
+          >
+            <circle cx={node.x} cy={node.y} r="18" fill="transparent" />
+            <circle
+              cx={node.x}
+              cy={node.y}
+              r="12"
+              fill={
+                node.id === startNode
+                  ? "#087f68"
+                  : node.id === destNode
+                    ? "#e17c50"
+                    : "#fff"
+              }
+              stroke={
+                node.id === startNode || node.id === destNode
+                  ? "#fff"
+                  : "#b9c9bf"
+              }
+              strokeWidth="2"
+            />
+            <text
+              x={node.x}
+              y={node.y + 3.5}
+              textAnchor="middle"
+              fontSize="10"
+              fontWeight="600"
+              fill={
+                node.id === startNode || node.id === destNode
+                  ? "#fff"
+                  : "#52675c"
+              }
+            >
+              {node.id}
+            </text>
+          </g>
+        ))}
+        {vehicles.map((vehicle) => (
+          <circle
+            key={vehicle.id}
+            cx={vehicle.x}
+            cy={vehicle.y}
+            r="3.5"
+            fill="#356dbe"
+            stroke="#fff"
+            strokeWidth="1"
+            pointerEvents="none"
+          />
         ))}
       </svg>
     </div>

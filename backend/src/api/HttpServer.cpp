@@ -9,6 +9,7 @@
 #include <httplib.h>
 #include <nlohmann/json.hpp>
 #include <iostream>
+#include <mutex>
 
 using json = nlohmann::json;
 
@@ -23,6 +24,8 @@ HttpServer::HttpServer(model::RoadNetwork& network, simulation::SimulationEngine
 
 void HttpServer::listen(const char* host, int port) {
     httplib::Server svr;
+    // Requests share one mutable city and simulation; serialize access to both.
+    std::mutex stateMutex;
 
     auto set_cors_headers = [](httplib::Response& res) {
         const char* origin_env = std::getenv("FRONTEND_ORIGIN");
@@ -33,17 +36,20 @@ void HttpServer::listen(const char* host, int port) {
     };
 
     svr.Options(R"(.*)", [&](const httplib::Request&, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(stateMutex);
         set_cors_headers(res);
         res.status = 200;
     });
 
     svr.Get("/health", [&](const httplib::Request&, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(stateMutex);
         set_cors_headers(res);
         json j = {{"status", "ok"}};
         res.set_content(j.dump(), "application/json");
     });
 
     svr.Get("/city", [&](const httplib::Request&, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(stateMutex);
         set_cors_headers(res);
         json j;
         j["coordinateSystem"] = (network.getCoordinateSystem() == model::CoordinateSystem::Geographic) ? "geographic" : "cartesian";
@@ -78,6 +84,7 @@ void HttpServer::listen(const char* host, int port) {
     });
 
     svr.Post("/mode", [&](const httplib::Request& req, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(stateMutex);
         set_cors_headers(res);
         try {
             auto body = json::parse(req.body);
@@ -89,20 +96,22 @@ void HttpServer::listen(const char* host, int port) {
             std::string mode = body["mode"];
             if (mode == "montreal") {
                 smart_mobility::model::MontrealOSMLoader loader;
-                network = loader.load(pbfPath);
-                if (network.getNodes().empty()) {
-                    res.status = 500;
-                    res.set_content(json{{"error", {{"code", "INTERNAL_ERROR"}, {"message", "Failed to load Montreal OSM graph"}}}}.dump(), "application/json");
+                auto loadedNetwork = loader.load(pbfPath);
+                if (loadedNetwork.getNodes().empty()) {
+                    res.status = 503;
+                    res.set_content(json{{"error", {{"code", "MAP_UNAVAILABLE"}, {"message", "Montreal map data is unavailable. Your current map has been preserved."}}}}.dump(), "application/json");
                     return;
                 }
+                engine.reset(); // Release road pointers before replacing their network.
+                network = std::move(loadedNetwork);
             } else if (mode == "generated") {
+                engine.reset();
                 network = model::GeneratedCityLoader::generate5x5Grid();
             } else {
                 res.status = 400;
                 res.set_content(json{{"error", {{"code", "BAD_REQUEST"}, {"message", "Invalid mode"}}}}.dump(), "application/json");
                 return;
             }
-            engine.reset();
             metrics::MetricsCollector::getInstance().setCityMode(mode);
             res.status = 200;
             res.set_content(json{{"status", "success"}}.dump(), "application/json");
@@ -113,6 +122,7 @@ void HttpServer::listen(const char* host, int port) {
     });
 
     svr.Get("/route", [&](const httplib::Request& req, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(stateMutex);
         set_cors_headers(res);
         
         if (!req.has_param("start") || !req.has_param("end")) {
@@ -195,6 +205,7 @@ void HttpServer::listen(const char* host, int port) {
     });
 
     svr.Get("/metrics", [&](const httplib::Request& req, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(stateMutex);
         set_cors_headers(res);
         auto snapshot = metrics::MetricsCollector::getInstance().getSnapshot();
         json j = snapshot.toJson();
@@ -211,6 +222,7 @@ void HttpServer::listen(const char* host, int port) {
     });
 
     svr.Get("/profiles", [&](const httplib::Request&, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(stateMutex);
         set_cors_headers(res);
         json j = {
             {"profiles", {"fastest", "shortest", "least_traffic", "cheapest", "balanced"}}
@@ -219,6 +231,7 @@ void HttpServer::listen(const char* host, int port) {
     });
 
     svr.Get(R"(/profiles/([a-zA-Z_]+))", [&](const httplib::Request& req, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(stateMutex);
         set_cors_headers(res);
         std::string name = req.matches[1];
         auto pref = recommendation::stringToPreference(name);
@@ -235,6 +248,7 @@ void HttpServer::listen(const char* host, int port) {
     });
 
     svr.Get("/recommend-route", [&](const httplib::Request& req, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(stateMutex);
         set_cors_headers(res);
         
         if (!req.has_param("start") || !req.has_param("end")) {
@@ -308,6 +322,7 @@ void HttpServer::listen(const char* host, int port) {
     });
 
     svr.Get("/recommend-route/compare", [&](const httplib::Request& req, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(stateMutex);
         set_cors_headers(res);
         
         if (!req.has_param("start") || !req.has_param("end")) {
@@ -355,6 +370,7 @@ void HttpServer::listen(const char* host, int port) {
     });
 
     svr.Get("/incidents", [&](const httplib::Request&, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(stateMutex);
         set_cors_headers(res);
         json j;
         j["incidents"] = json::array();
@@ -451,6 +467,7 @@ void HttpServer::listen(const char* host, int port) {
     };
 
     svr.Post("/incident", [&](const httplib::Request& req, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(stateMutex);
         set_cors_headers(res);
         try {
             auto body = json::parse(req.body);
@@ -498,6 +515,7 @@ void HttpServer::listen(const char* host, int port) {
     });
 
     svr.Delete("/incident", [&](const httplib::Request& req, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(stateMutex);
         set_cors_headers(res);
         try {
             auto body = json::parse(req.body);
@@ -528,6 +546,7 @@ void HttpServer::listen(const char* host, int port) {
     });
 
     svr.Post("/simulation/vehicle", [&](const httplib::Request& req, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(stateMutex);
         set_cors_headers(res);
         try {
             auto body = json::parse(req.body);
@@ -579,6 +598,7 @@ void HttpServer::listen(const char* host, int port) {
     });
 
     svr.Get("/vehicles", [&](const httplib::Request&, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(stateMutex);
         set_cors_headers(res);
         json j = json::array();
         for (const auto& v : engine.getVehicles()) {
@@ -601,6 +621,7 @@ void HttpServer::listen(const char* host, int port) {
     });
 
     svr.Post("/simulation/step", [&](const httplib::Request& req, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(stateMutex);
         set_cors_headers(res);
         try {
             double dt = 1.0;
@@ -640,12 +661,14 @@ void HttpServer::listen(const char* host, int port) {
     });
 
     svr.Post("/simulation/reset", [&](const httplib::Request&, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(stateMutex);
         set_cors_headers(res);
         engine.reset();
         res.set_content(json{{"status", "success"}}.dump(), "application/json");
     });
 
     svr.Get("/simulation", [&](const httplib::Request&, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(stateMutex);
         set_cors_headers(res);
         std::map<std::string, int> prefCounts;
         for (const auto& v : engine.getVehicles()) {
@@ -667,6 +690,7 @@ void HttpServer::listen(const char* host, int port) {
     });
 
     svr.Post("/simulation/vehicles/batch", [&](const httplib::Request& req, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(stateMutex);
         set_cors_headers(res);
         try {
             int count = 10;

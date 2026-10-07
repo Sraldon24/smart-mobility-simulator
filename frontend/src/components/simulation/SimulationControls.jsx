@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, FastForward, RotateCcw, Car } from 'lucide-react';
+import { Play, FastForward, RotateCcw } from 'lucide-react';
 
 export default function SimulationControls({
   onStep,

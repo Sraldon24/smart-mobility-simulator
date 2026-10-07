@@ -1,275 +1,161 @@
-import React, { useEffect, useRef } from 'react';
-import * as maplibregl from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Map, NavigationControl, setWorkerUrl } from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
+import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 
-export default function MontrealMap({ nodes, roads, startNode, destNode, routeNodeIds, vehicles, incidents, onNodeClick }) {
-  const mapContainer = useRef(null);
-  const map = useRef(null);
-  const nodeMapRef = useRef(new Map());
+setWorkerUrl(workerUrl);
+import {
+  addMapLayers,
+  collection,
+  line,
+  mapStyle,
+  point,
+  roadFeatures,
+} from "../features/simulator/mapData";
 
-  // 1. Initialize Map
+export default function MontrealMap({
+  nodes,
+  roads,
+  startNode,
+  destNode,
+  routeNodeIds,
+  vehicles,
+  onNodeClick,
+}) {
+  const container = useRef(null),
+    map = useRef(null),
+    latest = useRef({ nodes, onNodeClick });
+  const [ready, setReady] = useState(false),
+    [mapError, setMapError] = useState("");
+  const nodeIndex = useMemo(
+    () => new globalThis.Map(nodes.map((node) => [node.id, node])),
+    [nodes],
+  );
+  const roadData = useMemo(
+    () => roadFeatures(roads, nodeIndex),
+    [roads, nodeIndex],
+  );
   useEffect(() => {
-    if (map.current) return;
-    map.current = new maplibregl.Map({
-      container: mapContainer.current,
-      style: {
-        version: 8,
-        sources: {
-          'osm-tiles': {
-            type: 'raster',
-            tiles: [
-              'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
-            ],
-            tileSize: 256,
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          }
-        },
-        layers: [
-          {
-            id: 'osm-tiles-layer',
-            type: 'raster',
-            source: 'osm-tiles',
-            minzoom: 0,
-            maxzoom: 19
-          }
-        ]
-      },
-      center: [-73.5673, 45.5017], // Montreal approximate
-      zoom: 12
-    });
+    latest.current = { nodes, onNodeClick };
+  }, [nodes, onNodeClick]);
 
-    map.current.on('load', () => {
-      // Sources
-      map.current.addSource('roads', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      map.current.addSource('route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      map.current.addSource('endpoints', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      map.current.addSource('vehicles', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-
-      // Layers
-      map.current.addLayer({
-        id: 'roads-layer',
-        type: 'line',
-        source: 'roads',
-        layout: {
-          'line-join': 'round',
-          'line-cap': 'round'
-        },
-        paint: {
-          'line-color': ['get', 'color'],
-          'line-width': 4,
-          'line-dasharray': [
-            'case',
-            ['==', ['get', 'closed'], true],
-            ['literal', [2, 2]],
-            ['literal', [1]]
-          ]
-        }
+  useEffect(() => {
+    let instance;
+    try {
+      instance = new Map({
+        container: container.current,
+        style: mapStyle,
+        center: [-73.5673, 45.505],
+        zoom: 13,
       });
-
-      map.current.addLayer({
-        id: 'route-layer',
-        type: 'line',
-        source: 'route',
-        layout: {
-          'line-join': 'round',
-          'line-cap': 'round'
-        },
-        paint: {
-          'line-color': '#58a6ff',
-          'line-width': 6
-        }
+      map.current = instance;
+      instance.addControl(
+        new NavigationControl({ showCompass: false }),
+        "top-right",
+      );
+      instance.on("load", () => {
+        addMapLayers(instance);
+        setReady(true);
       });
-
-      map.current.addLayer({
-        id: 'endpoints-layer',
-        type: 'circle',
-        source: 'endpoints',
-        paint: {
-          'circle-radius': ['get', 'radius'],
-          'circle-color': ['get', 'color'],
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#0d1117'
-        }
+      instance.on("error", (event) => {
+        console.error("Map rendering error:", event.error);
+        setMapError(
+          "Background map unavailable. The street network and route remain interactive.",
+        );
       });
-
-      map.current.addLayer({
-        id: 'vehicles-layer',
-        type: 'circle',
-        source: 'vehicles',
-        paint: {
-          'circle-radius': 5,
-          'circle-color': '#58a6ff',
-          'circle-stroke-width': 1,
-          'circle-stroke-color': '#3182ce'
-        }
+      instance.on("click", (event) => {
+        const nearest = latest.current.nodes.reduce(
+          (best, node) => {
+            const screen = instance.project([node.x, node.y]);
+            const distance = Math.hypot(
+              screen.x - event.point.x,
+              screen.y - event.point.y,
+            );
+            return distance < best.distance ? { id: node.id, distance } : best;
+          },
+          { id: null, distance: 45 },
+        );
+        if (nearest.id !== null) latest.current.onNodeClick(nearest.id);
       });
-
-      // Click event for setting nodes
-      map.current.on('click', (e) => {
-        // Find nearest node manually or query rendered features
-        // Since we don't render all nodes as clickable objects (too many), we calculate distance.
-        if (nodeMapRef.current.size === 0) return;
-        const pt = e.lngLat;
-        let closestId = null;
-        let minDist = Infinity;
-        
-        for (const [id, n] of nodeMapRef.current.entries()) {
-          const dx = n.lon - pt.lng;
-          const dy = n.lat - pt.lat;
-          const dist = dx*dx + dy*dy;
-          if (dist < minDist) {
-            minDist = dist;
-            closestId = id;
-          }
-        }
-        
-        // If it's reasonably close, select it
-        if (closestId !== null && minDist < 0.001) { // rough distance
-          onNodeClick(closestId);
-        }
-      });
-      
-      // Initial trigger if data already loaded before map style finished
-      updateRoads();
-    });
+    } catch (error) {
+      console.error("Map initialization failed:", error);
+      queueMicrotask(() =>
+        setMapError(
+          "This browser could not start the map. Enable graphics acceleration or try another browser.",
+        ),
+      );
+    }
+    const observer = new ResizeObserver(() => instance?.resize());
+    observer.observe(container.current);
+    return () => {
+      observer.disconnect();
+      instance?.remove();
+      map.current = null;
+    };
   }, []);
 
-  const updateRoads = () => {
-    if (!map.current || !map.current.isStyleLoaded()) return;
-    
-    // Deduplicate and style roads
-    const features = [];
-    const seen = new Set();
-    
-    const getTrafficColor = (r) => {
-      if (r.closed) return '#da3633'; // Closed
-      if (r.trafficFactor >= 5.0) return '#da3633'; // Accident/Very congested
-      if (r.trafficFactor >= 2.0) return '#d29922'; // Congested
-      if (r.trafficFactor > 1.0) return '#a371f7'; // Moderate
-      return '#30363d'; // Free
-    };
-
-    roads.forEach(r => {
-      const min = Math.min(r.from, r.to);
-      const max = Math.max(r.from, r.to);
-      const key = `${min}-${max}`;
-      
-      if (!seen.has(key)) {
-        seen.add(key);
-        const n1 = nodeMapRef.current.get(r.from);
-        const n2 = nodeMapRef.current.get(r.to);
-        if (n1 && n2) {
-          features.push({
-            type: 'Feature',
-            geometry: {
-              type: 'LineString',
-              coordinates: [[n1.lon, n1.lat], [n2.lon, n2.lat]]
-            },
-            properties: {
-              color: getTrafficColor(r),
-              closed: r.closed || false
-            }
-          });
-        }
-      }
-    });
-
-    map.current.getSource('roads').setData({ type: 'FeatureCollection', features });
-  };
-
-  // 2. Base Nodes and Bounds
   useEffect(() => {
-    const nodeMap = new Map();
-    let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
-    nodes.forEach(n => {
-      nodeMap.set(n.id, n);
-      if (n.lon < minLng) minLng = n.lon;
-      if (n.lat < minLat) minLat = n.lat;
-      if (n.lon > maxLng) maxLng = n.lon;
-      if (n.lat > maxLat) maxLat = n.lat;
-    });
-    nodeMapRef.current = nodeMap;
-
-    if (nodes.length > 0 && map.current) {
-      if (minLng !== Infinity) {
-        map.current.fitBounds([[minLng, minLat], [maxLng, maxLat]], { padding: 20 });
-      }
-      updateRoads();
-    }
-  }, [nodes]);
-
-  // 3. Roads / Traffic updates
+    if (!ready || !nodes.length) return;
+    // Complete OSM ways extend beyond the extract; keep the initial view downtown.
+    map.current.fitBounds(
+      [
+        [-73.59, 45.485],
+        [-73.55, 45.525],
+      ],
+      {
+        padding: 35,
+        duration: 500,
+        maxZoom: 15,
+      },
+    );
+  }, [ready, nodes]);
   useEffect(() => {
-    updateRoads();
-  }, [roads]);
-
-  // 4. Route
+    if (ready) map.current.getSource("roads").setData(roadData);
+  }, [ready, roadData]);
   useEffect(() => {
-    if (!map.current || !map.current.isStyleLoaded()) return;
-    
-    let coords = [];
-    if (routeNodeIds && routeNodeIds.length > 0) {
-      coords = routeNodeIds.map(id => {
-        const n = nodeMapRef.current.get(id);
-        return n ? [n.lon, n.lat] : null;
-      }).filter(c => c !== null);
-    }
-    
-    const features = [];
-    if (coords.length > 1) {
-      features.push({
-        type: 'Feature',
-        geometry: {
-          type: 'LineString',
-          coordinates: coords
-        }
-      });
-      // Optionally fit bounds to route
-      const bounds = coords.reduce((bounds, coord) => {
-        return bounds.extend(coord);
-      }, new maplibregl.LngLatBounds(coords[0], coords[0]));
-      map.current.fitBounds(bounds, { padding: 50, maxZoom: 15 });
-    }
-    
-    map.current.getSource('route').setData({ type: 'FeatureCollection', features });
-  }, [routeNodeIds]);
-
-  // 5. Start / Dest Endpoints
+    if (!ready) return;
+    const coordinates = routeNodeIds.flatMap((id) =>
+      nodeIndex.has(id) ? [[nodeIndex.get(id).x, nodeIndex.get(id).y]] : [],
+    );
+    map.current
+      .getSource("route")
+      .setData(collection(coordinates.length > 1 ? [line(coordinates)] : []));
+  }, [ready, routeNodeIds, nodeIndex]);
   useEffect(() => {
-    if (!map.current || !map.current.isStyleLoaded()) return;
-    
-    const features = [];
-    const addNode = (id, color, radius) => {
-      const n = nodeMapRef.current.get(id);
-      if (n) {
-        features.push({
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: [n.lon, n.lat] },
-          properties: { color, radius }
-        });
-      }
-    };
-    
-    if (startNode !== null) addNode(startNode, '#238636', 8);
-    if (destNode !== null) addNode(destNode, '#da3633', 8);
-    
-    map.current.getSource('endpoints').setData({ type: 'FeatureCollection', features });
-  }, [startNode, destNode]);
-
-  // 6. Vehicles
+    if (!ready) return;
+    map.current.getSource("endpoints").setData(
+      collection(
+        [
+          [startNode, "#087f68"],
+          [destNode, "#e17c50"],
+        ].flatMap(([id, color]) => {
+          const node = nodeIndex.get(id);
+          return node ? [point([node.x, node.y], { color })] : [];
+        }),
+      ),
+    );
+  }, [ready, startNode, destNode, nodeIndex]);
   useEffect(() => {
-    if (!map.current || !map.current.isStyleLoaded()) return;
-    const features = vehicles.map(v => ({
-      type: 'Feature',
-      geometry: { type: 'Point', coordinates: [v.lon !== undefined ? v.lon : v.x, v.lat !== undefined ? v.lat : v.y] },
-      properties: { id: v.id }
-    }));
-    map.current.getSource('vehicles').setData({ type: 'FeatureCollection', features });
-  }, [vehicles]);
+    if (ready)
+      map.current
+        .getSource("vehicles")
+        .setData(
+          collection(
+            vehicles.map((vehicle) =>
+              point([vehicle.lon ?? vehicle.x, vehicle.lat ?? vehicle.y]),
+            ),
+          ),
+        );
+  }, [ready, vehicles]);
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
-      <div ref={mapContainer} style={{ width: '100%', height: '100%' }} />
+    <div className="montreal-map">
+      <div ref={container} className="map-canvas" />
+      {mapError && (
+        <div className="map-error" role="alert">
+          {mapError}
+        </div>
+      )}
     </div>
   );
 }

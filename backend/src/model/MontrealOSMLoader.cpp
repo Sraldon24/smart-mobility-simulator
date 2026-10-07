@@ -258,6 +258,7 @@ MontrealOSMLoader::~MontrealOSMLoader() {}
         this->stats = handler.stats;
         handler.network.buildIndex();
         network = std::move(handler.network);
+        network.setCoordinateSystem(::model::CoordinateSystem::Geographic);
 
         // Save to binary cache
         std::ofstream cacheOut(cacheFilePath, std::ios::binary);

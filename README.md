@@ -3,35 +3,36 @@
 [![C++20](https://img.shields.io/badge/C++-20-blue.svg)](https://isocpp.org/)
 [![CMake](https://img.shields.io/badge/CMake-3.20+-red.svg)](https://cmake.org/)
 [![React](https://img.shields.io/badge/React-18-61DAFB.svg)](https://reactjs.org/)
-[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows-lightgrey.svg)]()
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows-lightgrey.svg)](<>)
 [![CI Status](https://github.com/TODO-ADD-USERNAME/smart-mobility-simulator/actions/workflows/ci.yml/badge.svg)](https://github.com/TODO-ADD-USERNAME/smart-mobility-simulator/actions)
 
-A cross-platform C++20 smart mobility simulator featuring graph-based routing, multi-agent traffic simulation, personalized route recommendations, and real Montreal road data. 
+A cross-platform C++20 smart mobility simulator featuring graph-based routing, multi-agent traffic simulation, personalized route recommendations, and real Montreal road data.
 
 The backend runs a deterministic, high-performance simulation engine that updates thousands of vehicles per second, models emergent congestion, and computes A* shortest-path routing over dynamic edge costs. The system exposes a REST API consumed by a React frontend to visualize city-scale traffic patterns in real-time.
 
 ---
 
 ## 📸 Visualization
+
 > **TODO:** Insert an animated GIF (`docs/assets/montreal-demo.gif`) demonstrating 500+ vehicles navigating the Montreal grid, showing real-time congestion heatmaps and dynamic rerouting around an active accident.
 
 ---
 
 ## ⚡ Quick Feature Overview
 
-* **Dijkstra and A* Pathfinding:** Extensible routing engine supporting Fastest, Shortest, and Least-Traffic objectives.
-* **Deterministic Multi-Agent Simulation:** Vehicles navigate road segments using real physics (velocity × delta-time).
-* **Emergent Congestion:** Road occupancy dynamically increases travel-time edge costs.
-* **Incident Rerouting:** Live road closures and accidents trigger automatic route re-evaluations.
-* **Real OpenStreetMap Integration:** Parses `.osm.pbf` data (Montreal) via `libosmium`, handling one-way streets, varying speed limits, and geographic Haversine distances.
-* **Personalized Recommendations:** Multi-objective scoring system to balance travel time, distance, cost, and congestion for user profiles.
-* **Cross-Platform:** Builds identically on Linux (GCC) and Windows (MSVC) through CMake and GitHub Actions.
+- _*Dijkstra and A* Pathfinding:_* Extensible routing engine supporting Fastest, Shortest, and Least-Traffic objectives.
+- **Deterministic Multi-Agent Simulation:** Vehicles navigate road segments using real physics (velocity × delta-time).
+- **Emergent Congestion:** Road occupancy dynamically increases travel-time edge costs.
+- **Incident Rerouting:** Live road closures and accidents trigger automatic route re-evaluations.
+- **Real OpenStreetMap Integration:** Parses `.osm.pbf` data (Montreal) via `libosmium`, handling one-way streets, varying speed limits, and geographic Haversine distances.
+- **Personalized Recommendations:** Multi-objective scoring system to balance travel time, distance, cost, and congestion for user profiles.
+- **Cross-Platform:** Builds identically on Linux (GCC) and Windows (MSVC) through CMake and GitHub Actions.
 
 ---
 
 ## 🎯 Why This Project Exists
 
-I built the Smart Mobility Simulator to deepen my understanding of modern C++ performance, cache locality, and graph algorithms by applying them to a tangible, visual problem domain. 
+I built the Smart Mobility Simulator to deepen my understanding of modern C++ performance, cache locality, and graph algorithms by applying them to a tangible, visual problem domain.
 
 Instead of writing toy functions, this project demonstrates how to build a complete, cleanly decoupled software architecture. It integrates rigorous C++ backend engineering—focusing on value semantics, dense memory layouts, and algorithmic optimization—with a modern web frontend to create a measurable, interactive system.
 
@@ -45,24 +46,24 @@ The system is decoupled into pure data models, functional graph algorithms, and 
 flowchart TD
     GCL[GeneratedCityLoader] --> RN
     MOL[MontrealOSMLoader] --> RN
-    
+
     subgraph Core C++ Backend
     RN[(RoadNetwork Graph)]
     Router[Router: A* / Dijkstra]
     Sim[SimulationEngine]
     Rec[RecommendationEngine]
     end
-    
+
     RN <--> Router
     Router --> Sim
     Sim --> RN
     Router --> Rec
     RN --> Rec
-    
+
     Sim --> API[Thin REST API Layer]
     Rec --> API
     RN --> API
-    
+
     API <--> React[React / MapLibre Frontend]
 ```
 
@@ -72,17 +73,17 @@ flowchart TD
 
 ## 🛠 Tech Stack
 
-| Category | Technology |
-| :--- | :--- |
-| **Core** | C++20 |
-| **Build System** | CMake, Ninja |
-| **Routing** | Custom A* and Dijkstra implementations |
-| **OSM Parsing** | `libosmium` |
-| **Backend API** | `cpp-httplib`, `nlohmann/json` |
-| **Frontend** | React, Vite |
-| **Maps** | MapLibre GL JS |
-| **Testing** | Catch2, CTest |
-| **CI / CD** | GitHub Actions |
+| Category         | Technology                             |
+| :--------------- | :------------------------------------- |
+| **Core**         | C++20                                  |
+| **Build System** | CMake, Ninja                           |
+| **Routing**      | Custom A* and Dijkstra implementations |
+| **OSM Parsing**  | `libosmium`                            |
+| **Backend API**  | `cpp-httplib`, `nlohmann/json`         |
+| **Frontend**     | React, Vite                            |
+| **Maps**         | MapLibre GL JS                         |
+| **Testing**      | Catch2, CTest                          |
+| **CI / CD**      | GitHub Actions                         |
 
 ---
 
@@ -90,7 +91,7 @@ flowchart TD
 
 The core `RoadNetwork` is represented as a directed graph where nodes are intersections and directed edges are drivable road segments.
 
-The `Router` implements both Dijkstra and A* pathfinding. Crucially, the *algorithm* is decoupled from the *objective*. The objective (Shortest distance, Fastest time, Least traffic) is passed as an enum and dictates how edge costs are computed dynamically during relaxation. For A* on geographic data, the heuristic uses the Haversine formula to guarantee admissibility.
+The `Router` implements both Dijkstra and A* pathfinding. Crucially, the _algorithm_ is decoupled from the _objective_. The objective (Shortest distance, Fastest time, Least traffic) is passed as an enum and dictates how edge costs are computed dynamically during relaxation. For A* on geographic data, the heuristic uses the Haversine formula to guarantee admissibility.
 
 ---
 
@@ -100,7 +101,9 @@ The `Router` implements both Dijkstra and A* pathfinding. Crucially, the *algori
 A deterministic, pure Cartesian coordinate grid. Used for rigorous algorithmic unit testing, predictable simulation benchmarks, and controlled edge-case evaluation without external dependencies.
 
 **Montreal Mode:**
-A full map import from OpenStreetMap using `libosmium`. Features real street topology, geographic coordinates (latitude/longitude), one-way streets, missing speed limit fallback logic, and visual rendering via MapLibre. Both modes share 100% of the underlying simulation and routing code.
+A bundled downtown OpenStreetMap extract imported using `libosmium`. Features real street topology, geographic coordinates (latitude/longitude), one-way streets, missing speed limit fallback logic, and visual rendering via MapLibre. Both modes share the underlying simulation and routing code.
+
+The interface guides you through picking two map points and finding a route. **Try a sample journey** fills both points automatically. Route, Traffic, and Insights tabs keep advanced controls out of the main workflow; playback controls stay beneath the map. On narrow screens, the map appears above the controls.
 
 ---
 
@@ -130,20 +133,21 @@ We use **Min-Max Normalization** to map disparate units (seconds, meters, conges
 
 The simulator was heavily profiled and optimized based on measured benchmarks.
 
-| Subsystem | Baseline | Optimized | Improvement Note |
-| :--- | ---: | ---: | :--- |
-| **Simulation Loop** | ~1.5 ms | ~160 µs | Switched from $O(R)$ over all roads to $O(V)$ tracking only active roads. |
-| **A* Routing (Short)** | ~20-30 µs | ~1 µs | Replaced `std::unordered_map` with dense $O(1)$ `std::vector` indexing. |
-| **OSM Data Import** | ~4.5 s | < 100 ms | Implemented custom binary memory caching. |
+| Subsystem              |  Baseline | Optimized | Improvement Note                                                          |
+| :--------------------- | --------: | --------: | :------------------------------------------------------------------------ |
+| **Simulation Loop**    |   ~1.5 ms |   ~160 µs | Switched from $O(R)$ over all roads to $O(V)$ tracking only active roads. |
+| _*A* Routing (Short)_* | ~20-30 µs |     ~1 µs | Replaced `std::unordered_map` with dense $O(1)$ `std::vector` indexing.   |
+| **OSM Data Import**    |    ~4.5 s |  < 100 ms | Implemented custom binary memory caching.                                 |
 
-*Measurements taken on Linux Release build. Full details in [docs/performance.md](docs/performance.md).*
+_Measurements taken on Linux Release build. Full details in [docs/performance.md](docs/performance.md)._
 
 ---
 
 ## 🧪 Testing
 
-The backend is protected by a robust automated test suite utilizing Catch2 and integrated with CTest. 
+The backend is protected by a robust automated test suite utilizing Catch2 and integrated with CTest.
 Currently containing 14 test suites and over 200 assertions, the tests verify:
+
 - Graph integrity and metric consistency
 - Dijkstra and A* pathfinding correctness
 - Deterministic simulation movement
@@ -166,11 +170,13 @@ A GitHub Actions workflow automatically verifies that the codebase compiles clea
 ## 🚀 Getting Started
 
 ### Prerequisites
+
 - C++20 Compiler (GCC/Clang or MSVC)
 - CMake 3.20+
 - Node.js 18+
 
 ### 1. Build the Backend
+
 ```bash
 git clone https://github.com/TODO-ADD-USERNAME/smart-mobility-simulator.git
 cd smart-mobility-simulator
@@ -180,32 +186,39 @@ cmake --build build
 ```
 
 ### 2. Run the Backend
+
 ```bash
 # Start with the default Generated Grid mode
 ./build/backend/smart_mobility_backend
 ```
 
 ### 3. Run the Frontend
+
 ```bash
 cd frontend
 npm ci
 npm run dev
 ```
+
 Open `http://localhost:5173` in your browser.
 
 ---
 
 ## 📍 Montreal Data Setup
 
-To run the full Montreal simulation, you need the OpenStreetMap extract.
+The repository includes a 449 KiB downtown extract, also bundled in the backend
+Docker image. Select **Montréal Downtown** in the UI, or start directly in that mode:
 
-1. Download a `montreal.osm.pbf` file (e.g., from Protomaps or Geofabrik).
-2. Place it in the `data/montreal/` directory.
-3. Start the backend with the city flag:
 ```bash
 ./build/backend/smart_mobility_backend --city montreal
 ```
-*(Note: Do not commit the large `.pbf` files to version control).*
+
+For a larger local dataset, set `OSM_PBF_PATH=/absolute/path/to/montreal.osm.pbf`.
+Full-city datasets and generated caches stay ignored. See
+[data/montreal/README.md](data/montreal/README.md) for coverage, licensing, and reproduction.
+
+Deployment regressions (missing data, fresh geographic import, and switching back):
+`python3 tests/test_deployment.py build/backend/smart_mobility_backend`.
 
 ---
 
@@ -239,11 +252,13 @@ smart-mobility-simulator/
 ## 📚 Learning & Technical Depth
 
 This project serves as a practical demonstration of several core software engineering principles:
+
 - **Modern C++:** Auto, lambdas, RAII, move semantics, and `const` correctness.
 - **Algorithmic Complexity:** Understanding the real-world difference between $O(N \log N)$ and $O(N^2)$, and how constant factors (like CPU caching) often trump Big-O notation for small $N$.
 - **Geographic Data:** Calculating Haversine distances on a spherical coordinate system.
 
 For a deeper dive into the technical takeaways and interview talking points, see:
+
 - [C++ Learning Notes](docs/cpp-learning-notes.md)
 - [Interview Walkthrough](docs/interview-walkthrough.md)
 
@@ -260,6 +275,7 @@ For a deeper dive into the technical takeaways and interview talking points, see
 ## 🛣 Roadmap
 
 **Completed (MVP 1-7):**
+
 - [x] Shared RoadNetwork and C++ Backend
 - [x] Generated City & Montreal OSM Importer
 - [x] Dijkstra and A* Routing Algorithms
@@ -269,6 +285,7 @@ For a deeper dive into the technical takeaways and interview talking points, see
 - [x] Automated Tests, Benchmarks, and Cross-Platform CI
 
 **Future Ideas:**
+
 - Spatial partitioning for multithreaded simulation updates
 - Contraction Hierarchies (CH) for sub-millisecond continent-scale routing
 - Support for complex intersections and traffic lights

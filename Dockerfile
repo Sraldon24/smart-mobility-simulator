@@ -46,6 +46,8 @@ WORKDIR /app
 
 # The actual executable path produced by the build above.
 COPY --from=builder /app/_docker_build/backend/smart_mobility_backend ./smart_mobility_backend
+COPY data/montreal/downtown.osm.pbf /app/data/downtown.osm.pbf
+ENV OSM_PBF_PATH=/app/data/downtown.osm.pbf
 
 # Default port; Railway overrides this via the PORT environment variable.
 EXPOSE 8400

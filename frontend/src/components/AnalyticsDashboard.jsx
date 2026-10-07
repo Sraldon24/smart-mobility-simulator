@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Car, Route, Clock } from 'lucide-react';
+import { Activity, Car, Route } from 'lucide-react';
 
 export default function AnalyticsDashboard({ apiUrl }) {
+  const [error, setError] = useState('');
   const [metrics, setMetrics] = useState(null);
   const [history, setHistory] = useState([]);
   
@@ -9,6 +10,8 @@ export default function AnalyticsDashboard({ apiUrl }) {
     const fetchMetrics = async () => {
       try {
         const res = await fetch(`${apiUrl}/metrics?history=true`);
+        if (!res.ok) throw new Error('Analytics could not be loaded. Please try again.');
+        setError('');
         if (res.ok) {
           const data = await res.json();
           setMetrics(data);
@@ -17,7 +20,8 @@ export default function AnalyticsDashboard({ apiUrl }) {
           }
         }
       } catch (err) {
-        // Silently ignore if backend is not up yet
+        console.error('Analytics request failed:', err);
+        setError('Analytics are temporarily unavailable. Retrying…');
       }
     };
     
@@ -26,7 +30,8 @@ export default function AnalyticsDashboard({ apiUrl }) {
     return () => clearInterval(interval);
   }, [apiUrl]);
 
-  if (!metrics) return null;
+  if (error) return <div className="notice error" role="alert">{error}</div>;
+  if (!metrics) return <p role="status">Loading city insights…</p>;
 
   const { routing, simulation, traffic } = metrics;
 

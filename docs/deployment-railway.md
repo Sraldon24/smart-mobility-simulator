@@ -7,29 +7,31 @@ Railway runs them as **two separate services** from the same GitHub repository.
 
 ## Overview
 
-| Service   | Root Directory | Dockerfile                | PORT assigned by |
-|-----------|---------------|---------------------------|------------------|
-| Backend   | `/`           | `/Dockerfile`             | Railway (`PORT`) |
-| Frontend  | `/frontend`   | `/frontend/Dockerfile`    | Railway (`PORT`) |
+| Service  | Root Directory | Dockerfile             | PORT assigned by |
+| -------- | -------------- | ---------------------- | ---------------- |
+| Backend  | `/`            | `/Dockerfile`          | Railway (`PORT`) |
+| Frontend | `/frontend`    | `/frontend/Dockerfile` | Railway (`PORT`) |
 
 Railway automatically injects a `PORT` environment variable into every
 container. Both the backend and the Caddy frontend web server read it.
 
 ---
 
-## ⚠️ Montreal Mode Runtime Note
+## Montreal downtown data
 
-The Montreal/OpenStreetMap mode requires a `.osm.pbf` data file
-(`data/montreal/montreal.osm.pbf`) at runtime. This file is **gitignored**
-because it is ~160 MB and exceeds GitHub's file size limit.
+The backend image includes the 449 KiB downtown street extract at
+`/app/data/downtown.osm.pbf`, configured by `OSM_PBF_PATH`. No runtime download,
+volume, or map API key is required. See [data provenance and extraction](../data/montreal/README.md).
 
-**When deployed to Railway:**
-- The app starts in **Generated City mode** by default. All routing,
-  simulation, incidents, and recommendations work fully in this mode.
-- Switching to Montreal mode via the UI will fail with a backend error
-  because the `.osm.pbf` file is not present in the Docker image.
-- To enable Montreal mode in production, you would need to either use
-  Railway's volume storage or pre-download the file during the Docker build.
+The app starts with a clean practice grid. Select **Montréal Downtown** to load
+the included streets around Concordia, McGill, and Old Montreal. If the data is
+unavailable, the server returns `503 MAP_UNAVAILABLE` and preserves the current
+city. The UI displays the error without replacing the map.
+
+Only the small downtown extract is tracked. Full-city PBF files and generated
+binary caches remain excluded from Git and Docker contexts. Browser background
+tiles come from OpenStreetMap and require internet access; routing uses the
+bundled street network. MapLibre's worker is emitted as a separate Vite asset.
 
 ---
 
@@ -37,20 +39,21 @@ because it is ~160 MB and exceeds GitHub's file size limit.
 
 ### Backend Service
 
-| Variable          | Description                                             | Example value                                |
-|-------------------|---------------------------------------------------------|----------------------------------------------|
-| `PORT`            | **Set by Railway automatically.** Port to listen on.   | `8080` (Railway assigns this)                |
-| `FRONTEND_ORIGIN` | Allowed CORS origin (your Railway frontend public URL). | `https://smart-mobility-frontend.railway.app`|
+| Variable          | Description                                                | Example value                                 |
+| ----------------- | ---------------------------------------------------------- | --------------------------------------------- |
+| `PORT`            | **Set by Railway automatically.** Port to listen on.       | `8080` (Railway assigns this)                 |
+| `FRONTEND_ORIGIN` | Allowed CORS origin (your Railway frontend public URL).    | `https://smart-mobility-frontend.railway.app` |
+| `OSM_PBF_PATH`    | Optional dataset override; downtown is included in Docker. | `/app/data/downtown.osm.pbf`                  |
 
 > **CORS note:** If `FRONTEND_ORIGIN` is not set, the backend defaults to
 > `http://localhost:5173` for local development.
 
 ### Frontend Service
 
-| Variable        | Description                                              | Example value                               |
-|-----------------|----------------------------------------------------------|---------------------------------------------|
-| `PORT`          | **Set by Railway automatically.** Port Caddy listens on. | `3000` (Railway assigns this)               |
-| `VITE_API_URL`  | Full HTTPS URL of the backend Railway service.           | `https://smart-mobility-backend.railway.app`|
+| Variable       | Description                                              | Example value                                |
+| -------------- | -------------------------------------------------------- | -------------------------------------------- |
+| `PORT`         | **Set by Railway automatically.** Port Caddy listens on. | `3000` (Railway assigns this)                |
+| `VITE_API_URL` | Full HTTPS URL of the backend Railway service.           | `https://smart-mobility-backend.railway.app` |
 
 > **IMPORTANT:** `VITE_API_URL` is baked into the frontend bundle at build
 > time by Vite. You must set it as a Railway environment variable **before**
@@ -73,14 +76,17 @@ GitHub repo** → select `smart-mobility-simulator`.
 Railway will auto-detect the root `Dockerfile`.
 
 In the service settings:
+
 - **Root Directory:** `/` (leave at default)
 - **Dockerfile Path:** `Dockerfile`
 - **Health Check Path:** `/health`
 
 Add environment variable:
+
 ```
 FRONTEND_ORIGIN = https://<your-frontend-domain>.railway.app
 ```
+
 (Set this after you know the frontend domain; you can redeploy backend after.)
 
 Note the backend's **public URL** (e.g. `https://smart-mobility-backend-xxx.railway.app`).
@@ -92,10 +98,12 @@ Note the backend's **public URL** (e.g. `https://smart-mobility-backend-xxx.rail
 In the same Railway project, click **New** → **GitHub repo** → same repo.
 
 In the service settings:
+
 - **Root Directory:** `/frontend`
-- **Dockerfile Path:** `Dockerfile`  *(relative to root directory, so `/frontend/Dockerfile`)*
+- **Dockerfile Path:** `Dockerfile` _(relative to root directory, so `/frontend/Dockerfile`)_
 
 Add environment variable:
+
 ```
 VITE_API_URL = https://<your-backend-domain>.railway.app
 ```
@@ -107,11 +115,11 @@ handles SPA routing (any unknown path returns `index.html`).
 
 ### 4. Verify
 
-| URL                              | Expected result          |
-|----------------------------------|--------------------------|
-| `https://<backend>/health`       | `{"status":"ok"}`        |
-| `https://<frontend>/`            | React app loads          |
-| `https://<frontend>/health`      | `OK` (Caddy route)       |
+| URL                         | Expected result    |
+| --------------------------- | ------------------ |
+| `https://<backend>/health`  | `{"status":"ok"}`  |
+| `https://<frontend>/`       | React app loads    |
+| `https://<frontend>/health` | `OK` (Caddy route) |
 
 ---
 

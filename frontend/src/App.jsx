@@ -1,380 +1,219 @@
-import { useState, useEffect, useRef } from 'react';
-import CityMap from './components/CityMap';
-import MontrealMap from './components/MontrealMap';
-import AnalyticsDashboard from './components/AnalyticsDashboard';
-import RoutingControls from './components/routing/RoutingControls';
-import RouteSummary from './components/routing/RouteSummary';
-import SimulationControls from './components/simulation/SimulationControls';
-import VehicleMetrics from './components/simulation/VehicleMetrics';
-import IncidentPanel from './components/traffic/IncidentPanel';
-import RecommendationPanel from './components/recommendations/RecommendationPanel';
-import AlgorithmComparison from './components/AlgorithmComparison';
-import { Activity, Map as MapIcon, Database } from 'lucide-react';
-import './App.css';
+import { useEffect, useState } from "react";
+import { MousePointer2, X } from "lucide-react";
+import CityMap from "./components/CityMap";
+import MontrealMap from "./components/MontrealMap";
+import { useSimulator } from "./features/simulator/useSimulator";
+import {
+  AppHeader,
+  Sidebar,
+  SimulationBar,
+} from "./features/simulator/SimulatorPanels";
+import "./App.css";
+
+function nearest(nodes, lon, lat) {
+  return nodes.reduce((best, node) =>
+    Math.hypot(node.x - lon, node.y - lat) <
+    Math.hypot(best.x - lon, best.y - lat)
+      ? node
+      : best,
+  ).id;
+}
 
 export default function App() {
-  const [cityMode, setCityMode] = useState('generated');
-  const [isLoadingMode, setIsLoadingMode] = useState(false);
-  const [cityData, setCityData] = useState({ nodes: [], roads: [] });
-  const [incidents, setIncidents] = useState([]);
-  
-  const [startNode, setStartNode] = useState(0);
-  const [destNode, setDestNode] = useState(24);
-  const [algorithm, setAlgorithm] = useState('astar');
-  const [objective, setObjective] = useState('fastest');
-  
-  const [routeResult, setRouteResult] = useState(null);
-  const [routeError, setRouteError] = useState(null);
-  
-  const [incidentFrom, setIncidentFrom] = useState('');
-  const [incidentTo, setIncidentTo] = useState('');
-  const [incidentType, setIncidentType] = useState('closure');
-  const [incidentError, setIncidentError] = useState(null);
-  const [rerouteStatus, setRerouteStatus] = useState(null);
-
-  const [vehicles, setVehicles] = useState([]);
-  const [simulationTime, setSimulationTime] = useState(0);
-  const [congestedRoadCount, setCongestedRoadCount] = useState(0);
-  const [averageCongestion, setAverageCongestion] = useState(1.0);
-  const [totalReroutes, setTotalReroutes] = useState(0);
-
-  const [recommendationResult, setRecommendationResult] = useState(null);
-  const [selectedProfile, setSelectedProfile] = useState('balanced');
-  
-  const [comparisonResults, setComparisonResults] = useState(null);
-
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8400';
+  const model = useSimulator();
+  const [tab, setTab] = useState("route");
+  const [startNode, setStartNode] = useState(null);
+  const [destNode, setDestNode] = useState(null);
+  const [selecting, setSelecting] = useState("start");
+  const [algorithm, setAlgorithm] = useState("astar");
+  const [objective, setObjective] = useState("fastest");
+  const [profile, setProfile] = useState("balanced");
+  const [running, setRunning] = useState(false);
+  const [incidentFrom, setIncidentFrom] = useState("");
+  const [incidentTo, setIncidentTo] = useState("");
+  const [incidentType, setIncidentType] = useState("closure");
 
   useEffect(() => {
-    fetchCityAndIncidents();
-  }, [cityMode]);
+    if (!running || model.busy) return;
+    const timer = setTimeout(
+      () => model.simulate("step", { deltaTimeSeconds: 1 }),
+      1000,
+    );
+    return () => clearTimeout(timer);
+  }, [running, model]);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchSimulationState();
-    }, 1000); // Polling every second for UI refresh
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchCityAndIncidents = () => {
-    fetch(`${API_URL}/city`)
-      .then(res => res.json())
-      .then(data => {
-        setCityData(data);
-        setIsLoadingMode(false);
-      })
-      .catch(err => {
-        console.error("Failed to load city:", err);
-        setIsLoadingMode(false);
-      });
-
-    fetch(`${API_URL}/incidents`)
-      .then(res => res.json())
-      .then(data => setIncidents(data.incidents || []))
-      .catch(err => console.error("Failed to load incidents:", err));
-      
-    fetchSimulationState();
-  };
-
-  const fetchSimulationState = () => {
-    fetch(`${API_URL}/simulation`)
-      .then(res => res.json())
-      .then(data => {
-        setSimulationTime(data.simulationTimeSeconds || 0);
-        setCongestedRoadCount(data.congestedRoadCount || 0);
-        setAverageCongestion(data.averageCongestionFactor || 1.0);
-        setTotalReroutes(data.totalReroutes || 0);
-      })
-      .catch(err => {});
-
-    fetch(`${API_URL}/vehicles`)
-      .then(res => res.json())
-      .then(data => setVehicles(data || []))
-      .catch(err => {});
-  };
-
-  const handleCityModeChange = (mode) => {
-    if (mode === cityMode) return;
-    setCityMode(mode);
-    setIsLoadingMode(true);
-    setRouteResult(null);
-    setRecommendationResult(null);
-    setComparisonResults(null);
-    setRerouteStatus(null);
-    setStartNode(null);
-    setDestNode(null);
-    
-    fetch(`${API_URL}/mode`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode })
-    }).then(() => fetchCityAndIncidents());
-  };
-
-  const handleNodeClick = (nodeId) => {
-    if (startNode === null) {
-      setStartNode(nodeId);
-    } else if (destNode === null) {
-      setDestNode(nodeId);
-    } else {
-      setStartNode(nodeId);
+  const onMode = async (mode) => {
+    if (mode === model.mode && model.city.nodes.length) return;
+    setRunning(false);
+    if (await model.changeMode(mode)) {
+      setStartNode(null);
       setDestNode(null);
+      setSelecting("start");
     }
   };
-
-  const handleFindRoute = () => {
-    if (startNode === null || destNode === null) return;
-    setRouteError(null);
-    setRerouteStatus(null);
-    setRecommendationResult(null);
-    setComparisonResults(null);
-
-    fetch(`${API_URL}/route?start=${startNode}&end=${destNode}&algorithm=${algorithm}&objective=${objective}`)
-      .then(res => res.json().then(data => ({ status: res.status, data })))
-      .then(({ status, data }) => {
-        if (status === 200 && data.found) setRouteResult(data);
-        else if (status === 404) setRouteResult({ found: false });
-        else setRouteError(data.error?.message || "Routing failed");
-      })
-      .catch(err => setRouteError(err.message));
-  };
-
-  const handleCompare = () => {
-    if (startNode === null || destNode === null) return;
-    Promise.all([
-      fetch(`${API_URL}/route?start=${startNode}&end=${destNode}&algorithm=dijkstra&objective=${objective}`).then(r => r.json()),
-      fetch(`${API_URL}/route?start=${startNode}&end=${destNode}&algorithm=astar&objective=${objective}`).then(r => r.json())
-    ]).then(([dijkstraData, astarData]) => {
-      setComparisonResults({ dijkstra: dijkstraData, astar: astarData });
-      if (astarData.found) setRouteResult(astarData);
-    });
-  };
-
-  const handleRecommendRoute = () => {
-    if (startNode === null || destNode === null) return;
-    setRouteError(null);
-    setComparisonResults(null);
-    
-    fetch(`${API_URL}/recommend-route?start=${startNode}&end=${destNode}&profile=${selectedProfile}`)
-      .then(res => res.json().then(data => ({ status: res.status, data })))
-      .then(({ status, data }) => {
-        if (status === 200) {
-          setRecommendationResult(data);
-          setRouteResult({
-            found: true,
-            nodeIds: data.recommendedRoute.nodeIds,
-            totalDistanceMeters: data.recommendedRoute.distanceMeters,
-            estimatedTravelTimeSeconds: data.recommendedRoute.travelTimeSeconds,
-            algorithm: 'Recommendation',
-            objective: data.recommendedRoute.sourceObjective
-          });
-        }
-      });
-  };
-
-  const handleAddIncident = () => {
-    if (incidentFrom === '' || incidentTo === '') return;
-    setIncidentError(null);
-    
-    const body = {
-      from: parseInt(incidentFrom),
-      to: parseInt(incidentTo),
-      type: incidentType
-    };
-
-    if (routeResult && routeResult.found) {
-      body.activeRoute = {
-        start: startNode, end: destNode, algorithm, objective,
-        nodeIds: routeResult.nodeIds,
-        totalDistanceMeters: routeResult.totalDistanceMeters,
-        estimatedTravelTimeSeconds: routeResult.estimatedTravelTimeSeconds
-      };
+  const selectNode = (id) => {
+    model.update({ route: null, comparison: null, recommendation: null });
+    if (selecting === "start") {
+      setStartNode(id);
+      setSelecting("end");
+    } else {
+      setDestNode(id);
+      setSelecting("start");
     }
-
-    fetch(`${API_URL}/incident`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    }).then(res => res.json()).then(data => {
-      if (data.status === 'success') {
-        fetchCityAndIncidents();
-        setIncidentFrom('');
-        setIncidentTo('');
-        if (data.rerouted && data.newRouteResult) {
-          setRouteResult(data.newRouteResult);
-          setRerouteStatus({ type: 'error', message: 'Route updated due to new incident.', ...data });
-        }
-      } else {
-        setIncidentError(data.error?.message);
-      }
-    });
+    setTab("route");
   };
-
-  const handleRemoveIncident = (from, to) => {
-    const body = { from, to };
-    if (routeResult && routeResult.found) {
-      body.activeRoute = {
-        start: startNode, end: destNode, algorithm, objective,
-        nodeIds: routeResult.nodeIds,
-        totalDistanceMeters: routeResult.totalDistanceMeters,
-        estimatedTravelTimeSeconds: routeResult.estimatedTravelTimeSeconds
-      };
-    }
-
-    fetch(`${API_URL}/incident`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    }).then(res => res.json()).then(data => {
-      if (data.status === 'success') {
-        fetchCityAndIncidents();
-        if (data.rerouted && data.newRouteResult) {
-          setRouteResult(data.newRouteResult);
-          setRerouteStatus({ type: 'info', message: 'Route improved after incident cleared.', ...data });
-        }
-      }
-    });
+  const example = () => {
+    if (!model.city.nodes.length) return;
+    const start =
+      model.mode === "generated"
+        ? 0
+        : nearest(model.city.nodes, -73.5785, 45.4971);
+    const end =
+      model.mode === "generated"
+        ? 24
+        : nearest(model.city.nodes, -73.556, 45.503);
+    setStartNode(start);
+    setDestNode(end);
+    setSelecting("start");
+    model.findRoute(start, end, algorithm, objective);
   };
-
-  const handleSpawnBatch = (count) => {
-    fetch(`${API_URL}/simulation/vehicles/batch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ count })
-    }).then(() => fetchSimulationState());
+  const selection = { start: startNode, end: destNode, algorithm, objective };
+  const changePoint = (setter, value) => {
+    setter(value);
+    model.update({ route: null, comparison: null, recommendation: null });
   };
-
-  const handleStepSimulation = (dt) => {
-    fetch(`${API_URL}/simulation/step`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deltaTimeSeconds: dt })
-    }).then(() => fetchSimulationState());
+  const routing = {
+    startNode,
+    setStartNode: (value) => changePoint(setStartNode, value),
+    destNode,
+    setDestNode: (value) => changePoint(setDestNode, value),
+    algorithm,
+    setAlgorithm,
+    objective,
+    setObjective,
+    selecting,
+    onSelect: setSelecting,
+    onExample: example,
+    onFindRoute: () =>
+      model.findRoute(startNode, destNode, algorithm, objective),
+    onCompare: () => model.compare(startNode, destNode, objective),
   };
-
-  const handleResetSimulation = () => {
-    fetch(`${API_URL}/simulation/reset`, { method: 'POST' }).then(() => fetchSimulationState());
+  const incidentProps = {
+    incidents: model.incidents,
+    incidentFrom,
+    setIncidentFrom,
+    incidentTo,
+    setIncidentTo,
+    incidentType,
+    setIncidentType,
+    onAddIncident: () =>
+      model.incident(
+        "POST",
+        {
+          from: Number(incidentFrom),
+          to: Number(incidentTo),
+          type: incidentType,
+        },
+        selection,
+      ),
+    onRemoveIncident: (from, to) =>
+      model.incident("DELETE", { from, to }, selection),
   };
+  const MapComponent = model.mode === "montreal" ? MontrealMap : CityMap;
 
   return (
     <div className="app-container">
-      {/* Header */}
-      <header className="app-header">
-        <div className="flex-row gap-md">
-          <Activity color="var(--accent)" />
-          <h1 style={{ color: 'var(--text-primary)' }}>Smart Mobility Simulator</h1>
+      <AppHeader model={model} onMode={onMode} />
+      {(model.error || model.message) && (
+        <div
+          className={`app-notice ${model.error ? "error" : ""}`}
+          role="alert"
+        >
+          <span>{model.error || model.message}</span>
+          <button
+            aria-label="Dismiss message"
+            onClick={() => model.update({ error: "", message: "" })}
+          >
+            <X size={17} />
+          </button>
         </div>
-        
-        <div className="segmented-control" style={{ width: '300px' }}>
-          <button className={cityMode === 'generated' ? 'active' : ''} onClick={() => handleCityModeChange('generated')}>Generated Grid</button>
-          <button className={cityMode === 'montreal' ? 'active' : ''} onClick={() => handleCityModeChange('montreal')}>Montreal OSM</button>
-        </div>
-
-        <div className="header-status">
-          <span className={`status-dot ${cityData.nodes.length > 0 ? 'online' : 'loading'}`}></span>
-          <span className="text-muted">{cityData.nodes.length > 0 ? 'Backend Connected' : 'Connecting...'}</span>
-        </div>
-      </header>
-
-      {/* Main Layout */}
+      )}
       <main className="app-main">
-        {/* Sidebar */}
-        <aside className="app-sidebar">
-          <div className="sidebar-section">
-            <RoutingControls 
-              startNode={startNode} setStartNode={setStartNode}
-              destNode={destNode} setDestNode={setDestNode}
-              algorithm={algorithm} setAlgorithm={setAlgorithm}
-              objective={objective} setObjective={setObjective}
-              onFindRoute={handleFindRoute}
-              onCompare={handleCompare}
-            />
-            <div style={{ marginTop: '1rem' }}>
-              <RouteSummary routeResult={routeResult} routeError={routeError} rerouteStatus={rerouteStatus} />
+        <Sidebar
+          {...{
+            tab,
+            setTab,
+            routing,
+            model,
+            profile,
+            setProfile,
+            incidentProps,
+          }}
+        />
+        <section className="map-workspace" aria-label="Interactive city map">
+          <div className="map-heading">
+            <div>
+              <span className="eyebrow">
+                {model.mode === "montreal"
+                  ? "45.5017° N · 73.5673° W"
+                  : "YOUR ROUTING SANDBOX"}
+              </span>
+              <h2>
+                {model.mode === "montreal"
+                  ? "A little Montréal. A lot to discover."
+                  : "Every journey starts with a point."}
+              </h2>
             </div>
-            {comparisonResults && (
-              <div style={{ marginTop: '1rem' }}>
-                <AlgorithmComparison comparisonResults={comparisonResults} comparisonError={null} />
+            <span className="map-badge">
+              {model.mode === "montreal"
+                ? "OpenStreetMap · Downtown extract"
+                : "5 × 5 practice grid"}
+            </span>
+          </div>
+          <div className="map-container">
+            <MapComponent
+              nodes={model.city.nodes}
+              roads={model.city.roads}
+              startNode={startNode}
+              destNode={destNode}
+              routeNodeIds={model.route?.found ? model.route.nodeIds : []}
+              vehicles={model.vehicles}
+              onNodeClick={selectNode}
+            />
+            <div className="map-instruction">
+              <MousePointer2 size={16} />
+              {selecting === "start"
+                ? "Click a point to choose your start"
+                : "Now choose your destination"}
+              <span className="key-cap">
+                {selecting === "start" ? "1" : "2"}
+              </span>
+            </div>
+            {(model.busy || !model.city.nodes.length) && (
+              <div className="map-loading" role="status">
+                {model.busy
+                  ? "Updating your city…"
+                  : model.status === "offline"
+                    ? "The simulator is reconnecting. Please wait."
+                    : "Loading your map…"}
               </div>
             )}
-          </div>
-
-          <div className="sidebar-section">
-            <RecommendationPanel 
-              recommendationResult={recommendationResult}
-              selectedProfile={selectedProfile}
-              setSelectedProfile={setSelectedProfile}
-              onRecommend={handleRecommendRoute}
-              onCandidateSelect={(res) => setRouteResult(res)}
-            />
-          </div>
-
-          <div className="sidebar-section">
-            <IncidentPanel 
-              incidents={incidents}
-              incidentFrom={incidentFrom} setIncidentFrom={setIncidentFrom}
-              incidentTo={incidentTo} setIncidentTo={setIncidentTo}
-              incidentType={incidentType} setIncidentType={setIncidentType}
-              onAddIncident={handleAddIncident}
-              onRemoveIncident={handleRemoveIncident}
-              incidentError={incidentError}
-            />
-          </div>
-
-          <div className="sidebar-section">
-            <SimulationControls 
-              onStep={handleStepSimulation}
-              onReset={handleResetSimulation}
-              onSpawnBatch={handleSpawnBatch}
-            />
-            <div style={{ marginTop: '1rem' }}>
-              <VehicleMetrics 
-                simulationTime={simulationTime}
-                congestedRoadCount={congestedRoadCount}
-                averageCongestion={averageCongestion}
-                totalReroutes={totalReroutes}
-                vehicles={vehicles}
-              />
+            <div className="map-legend">
+              <span>
+                <i className="legend-dot start" />
+                Start
+              </span>
+              <span>
+                <i className="legend-dot end" />
+                Destination
+              </span>
+              <span>
+                <i className="legend-line" />
+                Your route
+              </span>
             </div>
           </div>
-        </aside>
-
-        {/* Map Area */}
-        <section className="map-container">
-          {isLoadingMode ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)' }}>
-              Loading Map Data...
-            </div>
-          ) : cityData.nodes.length > 0 ? (
-            cityMode === 'montreal' ? (
-              <MontrealMap 
-                nodes={cityData.nodes} 
-                roads={cityData.roads} 
-                incidents={incidents}
-                startNode={startNode} 
-                destNode={destNode}
-                routeNodeIds={routeResult?.found ? routeResult.nodeIds : []}
-                vehicles={vehicles}
-                onNodeClick={handleNodeClick}
-              />
-            ) : (
-              <CityMap 
-                nodes={cityData.nodes} 
-                roads={cityData.roads} 
-                incidents={incidents}
-                startNode={startNode} 
-                destNode={destNode}
-                routeNodeIds={routeResult?.found ? routeResult.nodeIds : []}
-                vehicles={vehicles}
-                onNodeClick={handleNodeClick}
-              />
-            )
-          ) : null}
-
-          {/* Analytics Overlay */}
-          <div className="analytics-overlay">
-            <AnalyticsDashboard apiUrl={API_URL} />
-          </div>
+          <SimulationBar {...{ model, running, setRunning }} />
         </section>
       </main>
     </div>

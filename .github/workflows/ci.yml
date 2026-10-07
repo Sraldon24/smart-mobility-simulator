@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -25,7 +25,7 @@ jobs:
             cc: cl
 
     runs-on: ${{ matrix.os }}
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -65,16 +65,25 @@ jobs:
         working-directory: build/backend
         run: ctest -C Release --output-on-failure
 
+      - name: Test deployment and Montreal data
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            python tests/test_deployment.py build/backend/Release/smart_mobility_backend.exe
+          else
+            python3 tests/test_deployment.py build/backend/smart_mobility_backend
+          fi
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "22"
+          cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
       - name: Build Frontend
         working-directory: frontend
         run: |
           npm ci
+          npm run lint
           npm run build
-

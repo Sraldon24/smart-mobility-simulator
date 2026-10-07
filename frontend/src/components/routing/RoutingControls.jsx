@@ -1,5 +1,10 @@
-import React from 'react';
-import { MapPin, Navigation, Compass, Activity, Play } from 'lucide-react';
+import {
+  ArrowRight,
+  MapPin,
+  Navigation,
+  RotateCcw,
+  Sparkles,
+} from "lucide-react";
 
 export default function RoutingControls({
   startNode,
@@ -11,101 +16,136 @@ export default function RoutingControls({
   objective,
   setObjective,
   onFindRoute,
-  onCompare
+  onCompare,
+  selecting,
+  onSelect,
+  onExample,
+  busy,
 }) {
+  const ready =
+    startNode !== null && destNode !== null && startNode !== destNode;
   return (
-    <div className="flex-col gap-md">
-      <h2>Routing</h2>
-      
-      <div className="flex-col gap-sm">
-        <label className="text-secondary text-sm">Start Node</label>
-        <div className="flex-row gap-sm">
-          <MapPin size={18} className="text-muted" />
-          <input 
-            type="number" 
-            value={startNode === null ? '' : startNode} 
-            onChange={(e) => setStartNode(e.target.value === '' ? null : parseInt(e.target.value))}
-            placeholder="Select on map"
-            style={{ flex: 1 }}
-          />
-        </div>
+    <div className="route-controls">
+      <div className="section-heading">
+        <span className="eyebrow">PLAN YOUR JOURNEY</span>
+        <h2>Where are we going?</h2>
+        <p>Pick two points on the map. We’ll find the way.</p>
       </div>
-
-      <div className="flex-col gap-sm">
-        <label className="text-secondary text-sm">Destination Node</label>
-        <div className="flex-row gap-sm">
-          <Navigation size={18} className="text-muted" />
-          <input 
-            type="number" 
-            value={destNode === null ? '' : destNode} 
-            onChange={(e) => setDestNode(e.target.value === '' ? null : parseInt(e.target.value))}
-            placeholder="Select on map"
-            style={{ flex: 1 }}
-          />
-        </div>
-      </div>
-
-      <div className="flex-col gap-sm" style={{ marginTop: '0.5rem' }}>
-        <label className="text-secondary text-sm">Algorithm</label>
-        <div className="segmented-control">
-          <button 
-            className={algorithm === 'dijkstra' ? 'active' : ''} 
-            onClick={() => setAlgorithm('dijkstra')}
-          >
-            Dijkstra
-          </button>
-          <button 
-            className={algorithm === 'astar' ? 'active' : ''} 
-            onClick={() => setAlgorithm('astar')}
-          >
-            A*
-          </button>
-        </div>
-      </div>
-
-      <div className="flex-col gap-sm">
-        <label className="text-secondary text-sm">Objective</label>
-        <div className="segmented-control">
-          <button 
-            className={objective === 'fastest' ? 'active' : ''} 
-            onClick={() => setObjective('fastest')}
-          >
-            Fastest
-          </button>
-          <button 
-            className={objective === 'shortest' ? 'active' : ''} 
-            onClick={() => setObjective('shortest')}
-          >
-            Shortest
-          </button>
-          <button 
-            className={objective === 'least_traffic' ? 'active' : ''} 
-            onClick={() => setObjective('least_traffic')}
-          >
-            Least Traffic
-          </button>
-        </div>
-      </div>
-
-      <div className="flex-row gap-sm" style={{ marginTop: '0.5rem' }}>
-        <button 
-          className="btn btn-primary" 
-          onClick={onFindRoute}
-          disabled={startNode === null || destNode === null}
-          style={{ flex: 1 }}
+      <div className="endpoint-fields">
+        <button
+          className={`endpoint ${selecting === "start" ? "selecting" : ""}`}
+          onClick={() => onSelect("start")}
         >
-          <Play size={16} /> Find Route
+          <span className="endpoint-dot start">
+            <MapPin size={17} />
+          </span>
+          <span>
+            <small>Starting point</small>
+            <strong>
+              {startNode === null ? "Click on the map" : `Point ${startNode}`}
+            </strong>
+          </span>
+          <span className="edit-label">Choose</span>
         </button>
-        <button 
-          className="btn" 
-          onClick={onCompare}
-          disabled={startNode === null || destNode === null}
-          title="Compare Dijkstra vs A*"
+        <button
+          className={`endpoint ${selecting === "end" ? "selecting" : ""}`}
+          onClick={() => onSelect("end")}
         >
-          <Activity size={16} /> Compare
+          <span className="endpoint-dot end">
+            <Navigation size={17} />
+          </span>
+          <span>
+            <small>Destination</small>
+            <strong>
+              {destNode === null ? "Click on the map" : `Point ${destNode}`}
+            </strong>
+          </span>
+          <span className="edit-label">Choose</span>
         </button>
       </div>
+      <button
+        className="text-button"
+        onClick={() => {
+          setStartNode(null);
+          setDestNode(null);
+          onSelect("start");
+        }}
+      >
+        <RotateCcw size={13} /> Clear points
+      </button>
+      <label className="field-label" htmlFor="route-preference">
+        What matters most?
+      </label>
+      <select
+        id="route-preference"
+        value={objective}
+        onChange={(event) => setObjective(event.target.value)}
+      >
+        <option value="fastest">Get there faster</option>
+        <option value="shortest">Travel less distance</option>
+        <option value="least_traffic">Avoid busy roads</option>
+      </select>
+      <button
+        className="btn btn-primary route-submit"
+        disabled={!ready || busy}
+        onClick={onFindRoute}
+      >
+        {busy ? "Working…" : "Find my route"}
+        <ArrowRight size={18} />
+      </button>
+      {!ready && (
+        <p className="helper-text">
+          {startNode === destNode && startNode !== null
+            ? "Choose a different destination."
+            : "Choose a start and destination to continue."}
+        </p>
+      )}
+      <button className="example-button" onClick={onExample} disabled={busy}>
+        <Sparkles size={16} /> Try a sample journey
+      </button>
+      <details className="advanced-options">
+        <summary>Advanced route options</summary>
+        <label className="field-label" htmlFor="route-algorithm">
+          Routing algorithm
+        </label>
+        <select
+          id="route-algorithm"
+          value={algorithm}
+          onChange={(event) => setAlgorithm(event.target.value)}
+        >
+          <option value="astar">A* (recommended)</option>
+          <option value="dijkstra">Dijkstra</option>
+        </select>
+        <div className="manual-points">
+          <label>
+            Start ID
+            <input
+              type="number"
+              value={startNode ?? ""}
+              onChange={(event) =>
+                setStartNode(
+                  event.target.value === "" ? null : Number(event.target.value),
+                )
+              }
+            />
+          </label>
+          <label>
+            Destination ID
+            <input
+              type="number"
+              value={destNode ?? ""}
+              onChange={(event) =>
+                setDestNode(
+                  event.target.value === "" ? null : Number(event.target.value),
+                )
+              }
+            />
+          </label>
+        </div>
+        <button className="btn" disabled={!ready || busy} onClick={onCompare}>
+          Compare algorithms
+        </button>
+      </details>
     </div>
   );
 }
-

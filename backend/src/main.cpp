@@ -150,6 +150,16 @@ int main(int argc, char** argv) {
     if (!f.good()) {
         pbfFile = "../../data/montreal/montreal.osm.pbf";
     }
+    if (const char* configuredPath = std::getenv("OSM_PBF_PATH")) {
+        pbfFile = configuredPath;
+    } else {
+        for (const auto* candidate : {"data/montreal/downtown.osm.pbf", "../data/montreal/downtown.osm.pbf", "../../data/montreal/downtown.osm.pbf"}) {
+            if (std::ifstream(candidate).good()) {
+                pbfFile = candidate;
+                break;
+            }
+        }
+    }
     
     for (int i = 1; i < argc; ++i) {
         if (std::string(argv[i]) == "--city" && i + 1 < argc) {
@@ -238,6 +248,10 @@ int main(int argc, char** argv) {
         std::cout << "Generated " << candidates.size() << " candidates in " 
                   << std::chrono::duration_cast<std::chrono::microseconds>(endCand - startCand).count() << " us\n";
     }
+
+    // Start the interactive session clean after the diagnostic examples above.
+    engine.reset();
+    if (cityMode != "montreal") network = model::GeneratedCityLoader::generate5x5Grid();
 
     std::cout << "Starting API server in " << cityMode << " mode...\n";
     api::HttpServer server(network, engine, pbfFile);
