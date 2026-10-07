@@ -1,5 +1,8 @@
 #include "api/HttpServer.hpp"
 #include "routing/Router.hpp"
+#include "recommendation/UserProfile.hpp"
+#include "recommendation/RecommendationEngine.hpp"
+#include "recommendation/RouteCandidateGenerator.hpp"
 #include <httplib.h>
 #include <nlohmann/json.hpp>
 #include <iostream>
@@ -99,6 +102,8 @@ void HttpServer::listen(const char* host, int port) {
                 obj = routing::RoutingObjective::Shortest;
             } else if (objStr == "fastest") {
                 obj = routing::RoutingObjective::Fastest;
+            } else if (objStr == "least_traffic") {
+                obj = routing::RoutingObjective::LeastTraffic;
             } else {
                 res.status = 400;
                 json err = {{"error", "invalid routing objective"}};
@@ -131,6 +136,150 @@ void HttpServer::listen(const char* host, int port) {
             res.status = 400;
             json err = {{"error", "Invalid parameter format"}};
             res.set_content(err.dump(), "application/json");
+        }
+    });
+
+    svr.Get("/profiles", [&](const httplib::Request&, httplib::Response& res) {
+        set_cors_headers(res);
+        json j = {
+            {"profiles", {"fastest", "shortest", "least_traffic", "cheapest", "balanced"}}
+        };
+        res.set_content(j.dump(), "application/json");
+    });
+
+    svr.Get(R"(/profiles/([a-zA-Z_]+))", [&](const httplib::Request& req, httplib::Response& res) {
+        set_cors_headers(res);
+        std::string name = req.matches[1];
+        auto pref = recommendation::stringToPreference(name);
+        auto profile = recommendation::makeProfile(pref);
+        
+        json j = {
+            {"name", name},
+            {"timeWeight", profile.timeWeight},
+            {"distanceWeight", profile.distanceWeight},
+            {"trafficWeight", profile.trafficWeight},
+            {"costWeight", profile.costWeight}
+        };
+        res.set_content(j.dump(), "application/json");
+    });
+
+    svr.Get("/recommend-route", [&](const httplib::Request& req, httplib::Response& res) {
+        set_cors_headers(res);
+        
+        if (!req.has_param("start") || !req.has_param("end")) {
+            res.status = 400;
+            json err = {{"error", "Missing 'start' or 'end' parameter"}};
+            res.set_content(err.dump(), "application/json");
+            return;
+        }
+
+        try {
+            int start = std::stoi(req.get_param_value("start"));
+            int end = std::stoi(req.get_param_value("end"));
+            
+            std::string profileStr = "balanced";
+            if (req.has_param("profile")) {
+                profileStr = req.get_param_value("profile");
+            }
+
+            auto candidates = recommendation::RouteCandidateGenerator::generateCandidates(network, start, end);
+            
+            if (candidates.empty()) {
+                res.status = 404;
+                res.set_content(json{{"error", "No route found"}}.dump(), "application/json");
+                return;
+            }
+
+            auto profile = recommendation::makeProfile(recommendation::stringToPreference(profileStr));
+            auto recommendationRes = recommendation::RecommendationEngine::recommend(candidates, profile);
+
+            auto serializeCandidate = [](const recommendation::ScoredCandidate& sc) {
+                return json{
+                    {"nodeIds", sc.candidate.nodeIds},
+                    {"distanceMeters", sc.candidate.totalDistanceMeters},
+                    {"travelTimeSeconds", sc.candidate.travelTimeSeconds},
+                    {"averageCongestion", sc.candidate.averageCongestion},
+                    {"estimatedCost", sc.candidate.estimatedCost},
+                    {"sourceObjective", sc.candidate.sourceObjective},
+                    {"score", sc.totalScore},
+                    {"normalizedValues", {
+                        {"time", sc.normalizedTime},
+                        {"distance", sc.normalizedDistance},
+                        {"traffic", sc.normalizedTraffic},
+                        {"cost", sc.normalizedCost}
+                    }},
+                    {"scoreBreakdown", {
+                        {"time", sc.timeContribution},
+                        {"distance", sc.distanceContribution},
+                        {"traffic", sc.trafficContribution},
+                        {"cost", sc.costContribution}
+                    }}
+                };
+            };
+
+            json j = {
+                {"profile", profileStr},
+                {"recommendedRoute", serializeCandidate(recommendationRes.recommendedRoute)},
+                {"explanation", recommendationRes.explanation},
+                {"candidates", json::array()}
+            };
+            
+            for (const auto& c : recommendationRes.allCandidates) {
+                j["candidates"].push_back(serializeCandidate(c));
+            }
+
+            res.set_content(j.dump(), "application/json");
+
+        } catch (...) {
+            res.status = 400;
+            res.set_content(json{{"error", "Invalid parameter format"}}.dump(), "application/json");
+        }
+    });
+
+    svr.Get("/recommend-route/compare", [&](const httplib::Request& req, httplib::Response& res) {
+        set_cors_headers(res);
+        
+        if (!req.has_param("start") || !req.has_param("end")) {
+            res.status = 400;
+            res.set_content(json{{"error", "Missing 'start' or 'end' parameter"}}.dump(), "application/json");
+            return;
+        }
+
+        try {
+            int start = std::stoi(req.get_param_value("start"));
+            int end = std::stoi(req.get_param_value("end"));
+            
+            auto candidates = recommendation::RouteCandidateGenerator::generateCandidates(network, start, end);
+            
+            if (candidates.empty()) {
+                res.status = 404;
+                res.set_content(json{{"error", "No route found"}}.dump(), "application/json");
+                return;
+            }
+
+            std::vector<std::string> profileNames = {"fastest", "shortest", "least_traffic", "cheapest", "balanced"};
+            json j = json::array();
+
+            for (const auto& pName : profileNames) {
+                auto profile = recommendation::makeProfile(recommendation::stringToPreference(pName));
+                auto recommendationRes = recommendation::RecommendationEngine::recommend(candidates, profile);
+                
+                j.push_back({
+                    {"profile", pName},
+                    {"nodeIds", recommendationRes.recommendedRoute.candidate.nodeIds},
+                    {"distanceMeters", recommendationRes.recommendedRoute.candidate.totalDistanceMeters},
+                    {"travelTimeSeconds", recommendationRes.recommendedRoute.candidate.travelTimeSeconds},
+                    {"averageCongestion", recommendationRes.recommendedRoute.candidate.averageCongestion},
+                    {"estimatedCost", recommendationRes.recommendedRoute.candidate.estimatedCost},
+                    {"score", recommendationRes.recommendedRoute.totalScore}
+                });
+            }
+
+            res.set_content(j.dump(), "application/json");
+
+        } catch (...) {
+            res.status = 400;
+            res.set_content(json{{"error", "Invalid parameter format"}}.dump(), "application/json");
         }
     });
 
@@ -318,8 +467,12 @@ void HttpServer::listen(const char* host, int port) {
             }
             int origin = body["origin"];
             int dest = body["destination"];
+            std::string prefStr = "balanced";
+            if (body.contains("preference")) {
+                prefStr = body["preference"];
+            }
             
-            int id = engine.spawnVehicle(origin, dest);
+            int id = engine.spawnVehicle(origin, dest, prefStr);
             if (id == -1) {
                 res.status = 400;
                 res.set_content(json{{"error", "Could not spawn vehicle. Invalid nodes or no route."}}.dump(), "application/json");
@@ -331,6 +484,7 @@ void HttpServer::listen(const char* host, int port) {
                 if (v.id == id) {
                     json j = {
                         {"id", v.id},
+                        {"preference", recommendation::preferenceToString(v.preference)},
                         {"origin", v.originNodeId},
                         {"destination", v.destinationNodeId},
                         {"state", model::vehicleStateToString(v.state)},
@@ -359,6 +513,7 @@ void HttpServer::listen(const char* host, int port) {
         for (const auto& v : engine.getVehicles()) {
             j.push_back({
                 {"id", v.id},
+                {"preference", recommendation::preferenceToString(v.preference)},
                 {"origin", v.originNodeId},
                 {"destination", v.destinationNodeId},
                 {"state", model::vehicleStateToString(v.state)},
@@ -393,6 +548,7 @@ void HttpServer::listen(const char* host, int port) {
             for (const auto& v : engine.getVehicles()) {
                 j["vehicles"].push_back({
                     {"id", v.id},
+                    {"preference", recommendation::preferenceToString(v.preference)},
                     {"origin", v.originNodeId},
                     {"destination", v.destinationNodeId},
                     {"state", model::vehicleStateToString(v.state)},
@@ -420,6 +576,11 @@ void HttpServer::listen(const char* host, int port) {
 
     svr.Get("/simulation", [&](const httplib::Request&, httplib::Response& res) {
         set_cors_headers(res);
+        std::map<std::string, int> prefCounts;
+        for (const auto& v : engine.getVehicles()) {
+            prefCounts[recommendation::preferenceToString(v.preference)]++;
+        }
+
         json j = {
             {"simulationTimeSeconds", engine.getSimulationTimeSeconds()},
             {"vehicleCount", engine.getVehicles().size()},
@@ -428,7 +589,8 @@ void HttpServer::listen(const char* host, int port) {
             {"arrived", engine.getArrivedVehicleCount()},
             {"congestedRoadCount", engine.getCongestedRoadCount()},
             {"averageCongestionFactor", engine.getAverageCongestionFactor()},
-            {"totalReroutes", engine.getTotalReroutes()}
+            {"totalReroutes", engine.getTotalReroutes()},
+            {"preferences", prefCounts}
         };
         res.set_content(j.dump(), "application/json");
     });

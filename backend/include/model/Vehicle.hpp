@@ -4,6 +4,8 @@
 #include <cstddef>
 #include <string>
 
+#include "recommendation/UserProfile.hpp"
+
 namespace model {
 
 enum class VehicleState {
@@ -23,6 +25,7 @@ inline std::string vehicleStateToString(VehicleState state) {
 
 struct Vehicle {
     int id;
+    recommendation::UserPreference preference{recommendation::UserPreference::Balanced};
     int originNodeId;
     int destinationNodeId;
     std::vector<int> routeNodeIds;

@@ -43,6 +43,15 @@ Road* RoadNetwork::getRoadMutable(int from, int to) {
     return nullptr;
 }
 
+const Road* RoadNetwork::getRoad(int from, int to) const {
+    for (const auto& road : roads) {
+        if (road.from == from && road.to == to) {
+            return &road;
+        }
+    }
+    return nullptr;
+}
+
 void RoadNetwork::setRoadClosed(int from, int to, bool closed) {
     Road* road = getRoadMutable(from, to);
     if (road) road->closed = closed;

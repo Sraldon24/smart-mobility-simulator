@@ -29,7 +29,13 @@ function App() {
   const [totalReroutes, setTotalReroutes] = useState(0)
   const [simOrigin, setSimOrigin] = useState('')
   const [simDest, setSimDest] = useState('')
+  const [simPreference, setSimPreference] = useState('balanced')
   const [simError, setSimError] = useState(null)
+  const [simPreferencesStats, setSimPreferencesStats] = useState({})
+
+  const [profiles, setProfiles] = useState([])
+  const [selectedProfile, setSelectedProfile] = useState('balanced')
+  const [profileWeights, setProfileWeights] = useState(null)
 
   const API_URL = 'http://localhost:8400'
 
@@ -55,6 +61,7 @@ function App() {
         setCongestedRoadCount(data.congestedRoadCount || 0)
         setAverageCongestion(data.averageCongestionFactor || 1.0)
         setTotalReroutes(data.totalReroutes || 0)
+        setSimPreferencesStats(data.preferences || {})
       })
       .catch(err => console.error("Failed to load simulation time:", err))
 
@@ -62,6 +69,13 @@ function App() {
       .then(res => res.json())
       .then(data => setVehicles(data || []))
       .catch(err => console.error("Failed to load vehicles:", err))
+  }
+
+  const fetchProfiles = () => {
+    fetch(`${API_URL}/profiles`)
+      .then(res => res.json())
+      .then(data => setProfiles(data.profiles || []))
+      .catch(err => console.error("Failed to load profiles:", err))
   }
 
   useEffect(() => {
@@ -74,7 +88,17 @@ function App() {
       .catch(() => setBackendStatus('Disconnected 🔴'))
 
     fetchCityAndIncidents()
+    fetchProfiles()
   }, [])
+
+  useEffect(() => {
+    if (selectedProfile) {
+      fetch(`${API_URL}/profiles/${selectedProfile}`)
+        .then(res => res.json())
+        .then(data => setProfileWeights(data))
+        .catch(err => console.error("Failed to load profile weights:", err))
+    }
+  }, [selectedProfile])
 
   const handleSpawnVehicle = () => {
     setSimError(null);
@@ -88,7 +112,8 @@ function App() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         origin: parseInt(simOrigin),
-        destination: parseInt(simDest)
+        destination: parseInt(simDest),
+        preference: simPreference
       })
     })
     .then(async res => {
@@ -141,6 +166,68 @@ function App() {
   const [algorithm, setAlgorithm] = useState('dijkstra')
   const [objective, setObjective] = useState('shortest')
 
+  const [recommendationResult, setRecommendationResult] = useState(null)
+
+  const handleRecommendRoute = () => {
+    if (startNode === null || destNode === null) {
+      setRouteError("Please select both a Start and Destination node.");
+      return;
+    }
+
+    setRouteResult(null)
+    setRouteError(null)
+    setComparisonResults(null)
+    setComparisonError(null)
+    setRerouteStatus(null)
+    setRecommendationResult(null)
+    setProfileComparison(null)
+
+    fetch(`${API_URL}/recommend-route?start=${startNode}&end=${destNode}&profile=${selectedProfile}`)
+      .then(async (res) => {
+        const data = await res.json()
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to recommend route')
+        }
+        setRecommendationResult(data)
+        setRouteResult({
+          found: true,
+          nodeIds: data.recommendedRoute.nodeIds,
+          totalDistanceMeters: data.recommendedRoute.distanceMeters,
+          estimatedTravelTimeSeconds: data.recommendedRoute.travelTimeSeconds,
+          algorithm: data.recommendedRoute.sourceObjective,
+          objective: data.recommendedRoute.sourceObjective
+        })
+      })
+      .catch(err => {
+        setRouteError(err.message)
+      })
+  }
+
+  const [profileComparison, setProfileComparison] = useState(null)
+  const [isComparingProfiles, setIsComparingProfiles] = useState(false)
+
+  const handleCompareProfiles = () => {
+    if (startNode === null || destNode === null) {
+      setRouteError("Please select both a Start and Destination node.");
+      return;
+    }
+
+    setProfileComparison(null);
+    setIsComparingProfiles(true);
+    setRouteError(null);
+    setRecommendationResult(null);
+    setComparisonResults(null);
+
+    fetch(`${API_URL}/recommend-route/compare?start=${startNode}&end=${destNode}`)
+      .then(async (res) => {
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Failed to compare profiles')
+        setProfileComparison(data)
+      })
+      .catch(err => setRouteError(err.message))
+      .finally(() => setIsComparingProfiles(false))
+  }
+
   const handleFindRoute = (overrideAlgo = algorithm, overrideObj = objective) => {
     if (startNode === null || destNode === null) {
       setRouteError("Please select both a Start and Destination node.");
@@ -152,6 +239,7 @@ function App() {
     setComparisonResults(null)
     setComparisonError(null)
     setRerouteStatus(null)
+    setProfileComparison(null)
 
     fetch(`${API_URL}/route?start=${startNode}&end=${destNode}&algorithm=${overrideAlgo}&objective=${overrideObj}`)
       .then(async (res) => {
@@ -177,6 +265,7 @@ function App() {
     setComparisonResults(null);
     setRouteError(null);
     setRerouteStatus(null)
+    setProfileComparison(null)
 
     try {
       const pDijkstra = fetch(`${API_URL}/route?start=${startNode}&end=${destNode}&algorithm=dijkstra&objective=${objective}`)
@@ -370,7 +459,7 @@ function App() {
             </div>
 
             <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <label style={{ fontWeight: 'bold' }}>Route Preference:</label>
+              <label style={{ fontWeight: 'bold' }}>Routing Objective:</label>
               <select 
                 value={objective} 
                 onChange={(e) => {
@@ -383,13 +472,51 @@ function App() {
                 <option value="fastest">Fastest</option>
               </select>
             </div>
+
+            <div style={{ padding: '10px', backgroundColor: '#e8f4fd', borderRadius: '4px', marginBottom: '15px' }}>
+              <div style={{ marginBottom: '5px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label style={{ fontWeight: 'bold', color: '#2980b9' }}>Route Preference (MVP5):</label>
+                <select 
+                  value={selectedProfile} 
+                  onChange={(e) => setSelectedProfile(e.target.value)}
+                  style={{ padding: '5px', borderRadius: '4px', border: '1px solid #ccc' }}
+                >
+                  {profiles.map(p => (
+                    <option key={p} value={p}>{p.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}</option>
+                  ))}
+                </select>
+              </div>
+              {profileWeights && (
+                <div style={{ fontSize: '0.85rem', color: '#34495e', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
+                  <span>Time: {(profileWeights.timeWeight * 100).toFixed(0)}%</span>
+                  <span>Dist: {(profileWeights.distanceWeight * 100).toFixed(0)}%</span>
+                  <span>Traffic: {(profileWeights.trafficWeight * 100).toFixed(0)}%</span>
+                  <span>Cost: {(profileWeights.costWeight * 100).toFixed(0)}%</span>
+                </div>
+              )}
+              
+              <button 
+                onClick={handleRecommendRoute}
+                style={{ width: '100%', marginTop: '10px', padding: '10px', backgroundColor: '#f39c12', color: 'white', border: 'none', borderRadius: '4px', fontSize: '1rem', cursor: 'pointer', fontWeight: 'bold' }}
+              >
+                Recommend Route
+              </button>
+              
+              <button 
+                onClick={handleCompareProfiles}
+                disabled={isComparingProfiles}
+                style={{ width: '100%', marginTop: '10px', padding: '10px', backgroundColor: '#e67e22', color: 'white', border: 'none', borderRadius: '4px', fontSize: '1rem', cursor: isComparingProfiles ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
+              >
+                {isComparingProfiles ? 'Comparing...' : 'Compare All Profiles'}
+              </button>
+            </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <button 
                 onClick={() => handleFindRoute()}
                 style={{ width: '100%', padding: '10px', backgroundColor: '#3498db', color: 'white', border: 'none', borderRadius: '4px', fontSize: '1rem', cursor: 'pointer', fontWeight: 'bold' }}
               >
-                Find Route
+                Find Route (Standard)
               </button>
               
               <button 
@@ -470,6 +597,14 @@ function App() {
                 <input type="number" value={simDest} onChange={(e) => setSimDest(e.target.value)} style={{ width: '100%', boxSizing: 'border-box', padding: '5px' }} />
               </div>
             </div>
+            <div style={{ marginBottom: '10px' }}>
+              <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 'bold' }}>Preference:</label>
+              <select value={simPreference} onChange={(e) => setSimPreference(e.target.value)} style={{ width: '100%', padding: '5px', boxSizing: 'border-box' }}>
+                {profiles.map(p => (
+                  <option key={p} value={p}>{p.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}</option>
+                ))}
+              </select>
+            </div>
 
             {simError && (
               <p style={{ color: '#c0392b', margin: '5px 0', fontSize: '0.9rem' }}>{simError}</p>
@@ -500,6 +635,15 @@ function App() {
                 <span>Moving: {vehicles.filter(v => v.state === 'moving').length}</span>
                 <span>Arrived: {vehicles.filter(v => v.state === 'arrived').length}</span>
               </div>
+              {Object.keys(simPreferencesStats).length > 0 && (
+                <div style={{ marginTop: '5px', color: '#7f8c8d', fontSize: '0.8rem', display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                  {Object.entries(simPreferencesStats).map(([pref, count]) => (
+                    <span key={pref} style={{ backgroundColor: '#ecf0f1', padding: '2px 5px', borderRadius: '3px' }}>
+                      {pref}: {count}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
@@ -515,7 +659,7 @@ function App() {
               <div style={{ maxHeight: '150px', overflowY: 'auto', borderTop: '1px solid #d4dde4', paddingTop: '10px' }}>
                 {vehicles.map((v) => (
                   <div key={v.id} style={{ backgroundColor: 'white', padding: '8px', borderRadius: '4px', marginBottom: '8px', border: '1px solid #ddd', fontSize: '0.85rem' }}>
-                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Vehicle {v.id}</div>
+                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Vehicle {v.id} ({v.preference})</div>
                     <div>{v.origin} → {v.destination}</div>
                     <div>State: <span style={{ textTransform: 'capitalize', color: v.state === 'waiting' ? '#f39c12' : (v.state === 'moving' ? '#3498db' : '#27ae60') }}>{v.state}</span></div>
                     {v.state === 'moving' && <div>Progress: {(v.progress * 100).toFixed(0)}%</div>}
@@ -557,7 +701,76 @@ function App() {
               <p style={{ color: '#7f8c8d', fontStyle: 'italic' }}>No route calculated yet.</p>
             )}
 
-            {routeResult && routeResult.found && (
+            {recommendationResult && (
+              <div style={{ marginTop: '15px' }}>
+                <h3 style={{ color: '#27ae60' }}>Recommended Route</h3>
+                <p style={{ fontStyle: 'italic', color: '#7f8c8d', margin: '5px 0' }}>{recommendationResult.explanation}</p>
+                <div style={{ backgroundColor: '#eafaf1', padding: '10px', borderRadius: '4px', border: '1px solid #2ecc71', marginBottom: '15px' }}>
+                  <p style={{ margin: '2px 0' }}><strong>Profile:</strong> {recommendationResult.profile}</p>
+                  <p style={{ margin: '2px 0' }}><strong>Score:</strong> {recommendationResult.recommendedRoute.score.toFixed(3)}</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '10px', fontSize: '0.9rem' }}>
+                    <div>
+                      <strong>Distance:</strong> {recommendationResult.recommendedRoute.distanceMeters.toFixed(1)} m<br/>
+                      <span style={{ color: '#7f8c8d', fontSize: '0.8rem' }}>Value: {recommendationResult.recommendedRoute.normalizedValues.distance.toFixed(2)} | Wt: {recommendationResult.recommendedRoute.scoreBreakdown.distance.toFixed(3)}</span>
+                    </div>
+                    <div>
+                      <strong>Travel Time:</strong> {recommendationResult.recommendedRoute.travelTimeSeconds.toFixed(1)} s<br/>
+                      <span style={{ color: '#7f8c8d', fontSize: '0.8rem' }}>Value: {recommendationResult.recommendedRoute.normalizedValues.time.toFixed(2)} | Wt: {recommendationResult.recommendedRoute.scoreBreakdown.time.toFixed(3)}</span>
+                    </div>
+                    <div>
+                      <strong>Congestion:</strong> {recommendationResult.recommendedRoute.averageCongestion.toFixed(2)}x<br/>
+                      <span style={{ color: '#7f8c8d', fontSize: '0.8rem' }}>Value: {recommendationResult.recommendedRoute.normalizedValues.traffic.toFixed(2)} | Wt: {recommendationResult.recommendedRoute.scoreBreakdown.traffic.toFixed(3)}</span>
+                    </div>
+                    <div>
+                      <strong>Est. Cost:</strong> ${recommendationResult.recommendedRoute.estimatedCost.toFixed(2)}<br/>
+                      <span style={{ color: '#7f8c8d', fontSize: '0.8rem' }}>Value: {recommendationResult.recommendedRoute.normalizedValues.cost.toFixed(2)} | Wt: {recommendationResult.recommendedRoute.scoreBreakdown.cost.toFixed(3)}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <h4>Other Candidates ({recommendationResult.candidates.length})</h4>
+                {recommendationResult.candidates.map((cand, idx) => {
+                  const isRecommended = cand.score === recommendationResult.recommendedRoute.score && cand.distanceMeters === recommendationResult.recommendedRoute.distanceMeters;
+                  return (
+                    <div 
+                      key={idx} 
+                      onClick={() => {
+                        setRouteResult({
+                          found: true,
+                          nodeIds: cand.nodeIds,
+                          totalDistanceMeters: cand.distanceMeters,
+                          estimatedTravelTimeSeconds: cand.travelTimeSeconds,
+                          algorithm: cand.sourceObjective,
+                          objective: cand.sourceObjective
+                        });
+                      }}
+                      style={{ 
+                        backgroundColor: isRecommended ? '#d5f5e3' : '#fdfefe', 
+                        padding: '8px', 
+                        borderRadius: '4px', 
+                        border: isRecommended ? '2px solid #2ecc71' : '1px solid #d5dbdb', 
+                        marginBottom: '8px', 
+                        fontSize: '0.9rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <div style={{ fontWeight: 'bold', color: '#2980b9', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Source: {cand.sourceObjective}</span>
+                        {isRecommended && <span style={{ color: '#27ae60' }}>★ Recommended</span>}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginTop: '4px' }}>
+                        <span>Dist: {cand.distanceMeters.toFixed(1)}m</span>
+                        <span>Time: {cand.travelTimeSeconds.toFixed(1)}s</span>
+                        <span>Cong: {cand.averageCongestion.toFixed(2)}x</span>
+                        <span><strong>Score: {cand.score.toFixed(3)}</strong></span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {routeResult && routeResult.found && !recommendationResult && (
               <div>
                 <p style={{ margin: '5px 0' }}>Algorithm: <strong>{routeResult.algorithm === 'astar' ? 'A*' : 'Dijkstra'}</strong></p>
                 <p style={{ margin: '5px 0' }}>Objective: <strong>{routeResult.objective === 'fastest' ? 'Fastest' : 'Shortest'}</strong></p>
@@ -567,14 +780,46 @@ function App() {
                 </div>
                 <p style={{ margin: '5px 0' }}>Distance: <strong>{routeResult.totalDistanceMeters} m</strong></p>
                 <p style={{ margin: '5px 0' }}>Estimated travel time: <strong>{routeResult.estimatedTravelTimeSeconds.toFixed(1)} s</strong></p>
-                <p style={{ margin: '5px 0' }}>Nodes explored: <strong>{routeResult.nodesExplored}</strong></p>
-                <p style={{ margin: '5px 0' }}>Runtime: <strong>{routeResult.runtimeMicroseconds} &micro;s</strong></p>
+                {routeResult.nodesExplored !== undefined && <p style={{ margin: '5px 0' }}>Nodes explored: <strong>{routeResult.nodesExplored}</strong></p>}
+                {routeResult.runtimeMicroseconds !== undefined && <p style={{ margin: '5px 0' }}>Runtime: <strong>{routeResult.runtimeMicroseconds} &micro;s</strong></p>}
               </div>
             )}
             
             {routeResult && !routeResult.found && (
               <div style={{ color: '#c0392b', fontWeight: 'bold' }}>
                 Route completely blocked. No path available.
+              </div>
+            )}
+
+            {profileComparison && (
+              <div style={{ marginTop: '15px', backgroundColor: '#fdfefe', padding: '10px', borderRadius: '4px', border: '1px solid #d5dbdb' }}>
+                <h3 style={{ color: '#e67e22', marginTop: 0 }}>Profile Comparison</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {profileComparison.map((p, idx) => (
+                    <div 
+                      key={idx} 
+                      onClick={() => {
+                        setRouteResult({
+                          found: true,
+                          nodeIds: p.nodeIds,
+                          totalDistanceMeters: p.distanceMeters,
+                          estimatedTravelTimeSeconds: p.travelTimeSeconds,
+                          algorithm: p.profile,
+                          objective: p.profile
+                        });
+                      }}
+                      style={{ padding: '8px', border: '1px solid #ecf0f1', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9rem' }}
+                    >
+                      <div style={{ fontWeight: 'bold', textTransform: 'capitalize' }}>{p.profile.replace('_', ' ')}</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginTop: '4px', color: '#34495e' }}>
+                        <span>Dist: {p.distanceMeters.toFixed(1)}m</span>
+                        <span>Time: {p.travelTimeSeconds.toFixed(1)}s</span>
+                        <span>Cong: {p.averageCongestion.toFixed(2)}x</span>
+                        <span>Cost: ${p.estimatedCost.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

@@ -2,31 +2,34 @@
 #include "routing/Router.hpp"
 #include <stdexcept>
 
+#include "recommendation/RouteCandidateGenerator.hpp"
+#include "recommendation/RecommendationEngine.hpp"
+
 namespace simulation {
 
 SimulationEngine::SimulationEngine(model::RoadNetwork& network)
     : network(network) {}
 
-int SimulationEngine::spawnVehicle(int originNodeId, int destinationNodeId) {
+int SimulationEngine::spawnVehicle(int originNodeId, int destinationNodeId, const std::string& preferenceStr) {
     if (!network.getNodeById(originNodeId) || !network.getNodeById(destinationNodeId)) {
         return -1; // Invalid nodes
     }
 
-    auto result = routing::Router::findRoute(
-        network, originNodeId, destinationNodeId, 
-        routing::RoutingAlgorithm::AStar, 
-        routing::RoutingObjective::Fastest
-    );
-
-    if (!result.found) {
+    auto candidates = recommendation::RouteCandidateGenerator::generateCandidates(network, originNodeId, destinationNodeId);
+    if (candidates.empty()) {
         return -1; // No route available
     }
 
+    auto prefEnum = recommendation::stringToPreference(preferenceStr);
+    auto profile = recommendation::makeProfile(prefEnum);
+    auto recommendationRes = recommendation::RecommendationEngine::recommend(candidates, profile);
+
     model::Vehicle v;
     v.id = nextVehicleId++;
+    v.preference = prefEnum;
     v.originNodeId = originNodeId;
     v.destinationNodeId = destinationNodeId;
-    v.routeNodeIds = result.nodeIds;
+    v.routeNodeIds = recommendationRes.recommendedRoute.candidate.nodeIds;
     v.currentRouteIndex = 0;
     v.state = model::VehicleState::Waiting;
     v.timeSinceLastReroute = 0.0;
@@ -38,8 +41,8 @@ int SimulationEngine::spawnVehicle(int originNodeId, int destinationNodeId) {
     }
     
     v.currentNodeId = originNodeId;
-    if (result.nodeIds.size() > 1) {
-        v.nextNodeId = result.nodeIds[1];
+    if (v.routeNodeIds.size() > 1) {
+        v.nextNodeId = v.routeNodeIds[1];
     } else {
         v.nextNodeId = originNodeId;
         v.state = model::VehicleState::Arrived;
@@ -118,21 +121,19 @@ void SimulationEngine::update(double deltaTimeSeconds) {
                         }
                     }
                     
-                    auto result = routing::Router::findRoute(
-                        network, v.nextNodeId, v.destinationNodeId, 
-                        routing::RoutingAlgorithm::AStar, 
-                        routing::RoutingObjective::Fastest
-                    );
-                    
-                    if (result.found) {
-                        double newRemainingTime = timeOnCurrentEdge + result.estimatedTravelTimeSeconds;
+                    auto candidates = recommendation::RouteCandidateGenerator::generateCandidates(network, v.nextNodeId, v.destinationNodeId);
+                    if (!candidates.empty()) {
+                        auto profile = recommendation::makeProfile(v.preference);
+                        auto recommendationRes = recommendation::RecommendationEngine::recommend(candidates, profile);
+                        
+                        double newRemainingTime = timeOnCurrentEdge + recommendationRes.recommendedRoute.candidate.travelTimeSeconds;
                         if (newRemainingTime < currentRemainingTime * 0.8) {
                             std::vector<int> newRoute;
                             for (std::size_t i = 0; i <= v.currentRouteIndex; ++i) {
                                 newRoute.push_back(v.routeNodeIds[i]);
                             }
-                            for (std::size_t i = 1; i < result.nodeIds.size(); ++i) {
-                                newRoute.push_back(result.nodeIds[i]);
+                            for (std::size_t i = 1; i < recommendationRes.recommendedRoute.candidate.nodeIds.size(); ++i) {
+                                newRoute.push_back(recommendationRes.recommendedRoute.candidate.nodeIds[i]);
                             }
                             v.routeNodeIds = newRoute;
                             totalReroutes++;
@@ -224,6 +225,10 @@ int SimulationEngine::spawnVehiclesBatch(int count) {
     std::size_t numNodes = network.getNodes().size();
     if (numNodes == 0) return 0;
 
+    const std::vector<std::string> prefs = {
+        "fastest", "shortest", "least_traffic", "balanced", "cheapest"
+    };
+
     for (int i = 0; i < count; ++i) {
         int baseIndex = vehicles.size() + i;
         int origin = (baseIndex * 7) % numNodes;
@@ -233,7 +238,9 @@ int SimulationEngine::spawnVehiclesBatch(int count) {
             dest = (dest + 1) % numNodes;
         }
         
-        int result = spawnVehicle(origin, dest);
+        std::string pref = prefs[baseIndex % prefs.size()];
+        
+        int result = spawnVehicle(origin, dest, pref);
         if (result != -1) {
             spawned++;
         }

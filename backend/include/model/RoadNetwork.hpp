@@ -33,6 +33,7 @@ public:
 
     const Node* getNodeById(int id) const;
     Road* getRoadMutable(int from, int to);
+    const Road* getRoad(int from, int to) const;
     
     void setRoadClosed(int from, int to, bool closed);
 

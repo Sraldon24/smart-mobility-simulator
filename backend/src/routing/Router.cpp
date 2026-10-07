@@ -62,7 +62,12 @@ RouteResult Router::findRouteDijkstra(const model::RoadNetwork& network, int sta
 
         for (const model::Road* road : adj[u]) {
             int v = road->to;
-            double weight = (objective == RoutingObjective::Fastest) ? road->getTravelTimeSeconds() : road->distanceMeters;
+            double weight = road->distanceMeters;
+            if (objective == RoutingObjective::Fastest) {
+                weight = road->getTravelTimeSeconds();
+            } else if (objective == RoutingObjective::LeastTraffic) {
+                weight = road->distanceMeters * road->getEffectiveTrafficFactor();
+            }
 
             if (dist[u] + weight < dist[v]) {
                 dist[v] = dist[u] + weight;
@@ -134,6 +139,9 @@ RouteResult Router::findRouteAStar(const model::RoadNetwork& network, int startN
         if (objective == RoutingObjective::Fastest) {
             // Assume max speed limit of 50 km/h and free traffic (1.0) for admissible heuristic
             return dist / (50.0 / 3.6);
+        } else if (objective == RoutingObjective::LeastTraffic) {
+            // effective traffic factor is >= 1.0, so distance * 1.0 is admissible
+            return dist;
         }
         return dist;
     };
@@ -170,7 +178,12 @@ RouteResult Router::findRouteAStar(const model::RoadNetwork& network, int startN
 
         for (const model::Road* road : adj[u]) {
             int v = road->to;
-            double weight = (objective == RoutingObjective::Fastest) ? road->getTravelTimeSeconds() : road->distanceMeters;
+            double weight = road->distanceMeters;
+            if (objective == RoutingObjective::Fastest) {
+                weight = road->getTravelTimeSeconds();
+            } else if (objective == RoutingObjective::LeastTraffic) {
+                weight = road->distanceMeters * road->getEffectiveTrafficFactor();
+            }
             
             double tentative_gScore = gScore[u] + weight;
             if (tentative_gScore < gScore[v]) {

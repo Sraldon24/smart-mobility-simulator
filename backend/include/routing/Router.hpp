@@ -21,7 +21,8 @@ enum class RoutingAlgorithm {
 
 enum class RoutingObjective {
     Shortest,
-    Fastest
+    Fastest,
+    LeastTraffic
 };
 
 class Router {

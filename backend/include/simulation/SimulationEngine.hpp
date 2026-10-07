@@ -10,7 +10,7 @@ class SimulationEngine {
 public:
     explicit SimulationEngine(model::RoadNetwork& network);
     
-    int spawnVehicle(int originNodeId, int destinationNodeId);
+    int spawnVehicle(int originNodeId, int destinationNodeId, const std::string& preferenceStr = "balanced");
     int spawnVehiclesBatch(int count);
     
     const std::vector<model::Vehicle>& getVehicles() const;

@@ -19,6 +19,19 @@ add_executable(smart_mobility_backend
     src/routing/Router.cpp
     src/api/HttpServer.cpp
     src/simulation/SimulationEngine.cpp
+    src/recommendation/UserProfile.cpp
+    src/recommendation/RecommendationEngine.cpp
+    src/recommendation/RouteCandidateGenerator.cpp
 )
 target_include_directories(smart_mobility_backend PRIVATE include)
 target_link_libraries(smart_mobility_backend PRIVATE nlohmann_json::nlohmann_json httplib::httplib)
+
+add_executable(test_recommendation
+    src/test_recommendation.cpp
+    src/model/RoadNetwork.cpp
+    src/routing/Router.cpp
+    src/recommendation/UserProfile.cpp
+    src/recommendation/RecommendationEngine.cpp
+    src/recommendation/RouteCandidateGenerator.cpp
+)
+target_include_directories(test_recommendation PRIVATE include)
