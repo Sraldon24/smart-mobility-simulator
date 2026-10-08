@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Map, NavigationControl, setWorkerUrl } from "maplibre-gl";
+import {
+  Map,
+  NavigationControl,
+  LngLatBounds,
+  setWorkerUrl,
+} from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 
@@ -25,6 +30,10 @@ export default function MontrealMap({
   const container = useRef(null),
     map = useRef(null),
     latest = useRef({ nodes, onNodeClick });
+  const viewBounds = useRef([
+    [-73.59, 45.485],
+    [-73.55, 45.525],
+  ]);
   const [ready, setReady] = useState(false),
     [mapError, setMapError] = useState("");
   const nodeIndex = useMemo(
@@ -85,7 +94,15 @@ export default function MontrealMap({
         ),
       );
     }
-    const observer = new ResizeObserver(() => instance?.resize());
+    const observer = new ResizeObserver(() => {
+      if (!instance) return;
+      instance.resize();
+      instance.fitBounds(viewBounds.current, {
+        padding: 45,
+        duration: 0,
+        maxZoom: 15,
+      });
+    });
     observer.observe(container.current);
     return () => {
       observer.disconnect();
@@ -120,6 +137,16 @@ export default function MontrealMap({
     map.current
       .getSource("route")
       .setData(collection(coordinates.length > 1 ? [line(coordinates)] : []));
+    if (coordinates.length > 1) {
+      const bounds = new LngLatBounds();
+      coordinates.forEach((coordinate) => bounds.extend(coordinate));
+      viewBounds.current = bounds;
+      map.current.fitBounds(bounds, {
+        padding: 65,
+        duration: 400,
+        maxZoom: 15,
+      });
+    }
   }, [ready, routeNodeIds, nodeIndex]);
   useEffect(() => {
     if (!ready) return;
